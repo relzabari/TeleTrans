@@ -31,6 +31,7 @@ TeleTrans is a Telegram bot that listens to messages from a configured source ch
    API_ID=your_api_id
    API_HASH=your_api_hash
    PHONE=your_phone_number
+   TELEGRAM_SESSION=
    SUPABASE_URL=your_project_url
    SUPABASE_KEY=your_service_role_key
    ```
@@ -58,6 +59,21 @@ Without Supabase credentials, checkpoints are stored locally in
 `supabase/migrations/001_channel_checkpoints.sql` in the Supabase SQL editor and
 configure `SUPABASE_URL` and a server-side `SUPABASE_KEY` environment variable.
 Never expose the service-role key in frontend code or commit it to Git.
+
+## StringSession for ephemeral hosting
+When `TELEGRAM_SESSION` is set, the bot uses Telethon's in-memory StringSession
+instead of a local SQLite session file. Generate it once from an already
+authorized local session:
+
+```bash
+python -m app.export_string_session
+```
+
+Copy the resulting secret directly into Render's `TELEGRAM_SESSION` environment
+variable. Anyone who obtains this value can access the Telegram account, so do
+not save it in Git, logs, screenshots, Supabase tables, or frontend code. The bot
+fails immediately instead of prompting for a login code if the supplied string
+is invalid or expired.
 
 ## External server deployment
 For a server deployment, prepare the following:

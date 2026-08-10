@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 
 from app.config import BotConfig
 from app.completion import CompletionManager
@@ -16,7 +17,25 @@ logger = logging.getLogger(__name__)
 
 
 def create_client(config: BotConfig) -> TelegramClient:
-    return TelegramClient(str(config.session_path), config.api_id, config.api_hash)
+    session = (
+        StringSession(config.telegram_session)
+        if config.telegram_session
+        else str(config.session_path)
+    )
+    return TelegramClient(session, config.api_id, config.api_hash)
+
+
+async def start_client(client: TelegramClient, config: BotConfig) -> None:
+    if not config.telegram_session:
+        await client.start(phone=config.phone)
+        return
+
+    await client.connect()
+    if not await client.is_user_authorized():
+        await client.disconnect()
+        raise RuntimeError(
+            "TELEGRAM_SESSION is invalid or expired; generate a new StringSession"
+        )
 
 
 async def process_message(client: TelegramClient, config: BotConfig, event: Any) -> None:

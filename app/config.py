@@ -15,6 +15,7 @@ class BotConfig:
     api_id: int
     api_hash: str
     phone: str
+    telegram_session: str | None
     session_path: Path
     checkpoint_path: Path
     supabase_url: str | None
@@ -43,7 +44,7 @@ def _resolve_session_path(root: Path) -> Path:
     data_session = root / "data" / "sessions" / "telegram"
     legacy_session = root / "session" / "session"
 
-    if legacy_session.exists():
+    if legacy_session.exists() or legacy_session.with_suffix(".session").exists():
         return legacy_session
     return data_session
 
@@ -65,6 +66,7 @@ def load_config() -> BotConfig:
         api_id=int(_get_required_env("API_ID")),
         api_hash=_get_required_env("API_HASH"),
         phone=_get_required_env("PHONE"),
+        telegram_session=os.getenv("TELEGRAM_SESSION") or None,
         session_path=session_path,
         checkpoint_path=root / "data" / "checkpoints.json",
         supabase_url=os.getenv("SUPABASE_URL") or None,

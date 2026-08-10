@@ -5,7 +5,7 @@ import logging
 from app.checkpoints import FileCheckpointStore, SupabaseCheckpointStore
 from app.completion import CompletionManager
 from app.config import load_config
-from app.telegram_client import create_client, process_message, register_handlers
+from app.telegram_client import create_client, process_message, register_handlers, start_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -15,7 +15,7 @@ async def main() -> None:
     client = create_client(config)
 
     logging.info("Starting Telegram translator bot...")
-    await client.start(phone=config.phone)
+    await start_client(client, config)
 
     if config.supabase_url and config.supabase_key:
         checkpoint_store = SupabaseCheckpointStore(
