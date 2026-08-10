@@ -8,3 +8,10 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Local Telegram media
+*.mp4
+*.MP4
+*.mov
+*.MOV
+photo_*.jpg
