@@ -16,6 +16,9 @@ class BotConfig:
     api_hash: str
     phone: str
     session_path: Path
+    checkpoint_path: Path
+    supabase_url: str | None
+    supabase_key: str | None
 
 
 def get_project_root() -> Path:
@@ -63,4 +66,7 @@ def load_config() -> BotConfig:
         api_hash=_get_required_env("API_HASH"),
         phone=_get_required_env("PHONE"),
         session_path=session_path,
+        checkpoint_path=root / "data" / "checkpoints.json",
+        supabase_url=os.getenv("SUPABASE_URL") or None,
+        supabase_key=os.getenv("SUPABASE_KEY") or None,
     )

@@ -2,6 +2,7 @@
 .env.*
 session/
 data/sessions/
+data/checkpoints.json
 *.session
 *.session-journal
 __pycache__/
