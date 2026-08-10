@@ -79,6 +79,10 @@ authorized local session:
 python -m app.export_string_session
 ```
 
+If the existing authorization was revoked, create a completely new one
+interactively with `python -m app.export_string_session --new`. Ensure no other
+service uses the resulting value until this command has disconnected.
+
 Copy the resulting secret directly into Render's `TELEGRAM_SESSION` environment
 variable. Anyone who obtains this value can access the Telegram account, so do
 not save it in Git, logs, screenshots, Supabase tables, or frontend code. The bot
