@@ -9,7 +9,13 @@ from typing import Any
 from app.checkpoints import FileCheckpointStore, SupabaseCheckpointStore
 from app.completion import CompletionManager
 from app.config import BotConfig, load_config
-from app.telegram_client import create_client, process_message, register_handlers, start_client
+from app.telegram_client import (
+    create_client,
+    process_message,
+    register_handlers,
+    resolve_destination,
+    start_client,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +70,9 @@ class BotRuntime:
             config = load_config()
             self.client = create_client(config)
             await start_client(self.client, config)
+            config.destination = await resolve_destination(
+                self.client, config.destination
+            )
 
             store = self._create_checkpoint_store(config)
             self.completion = CompletionManager(

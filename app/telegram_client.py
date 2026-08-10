@@ -38,6 +38,22 @@ async def start_client(client: TelegramClient, config: BotConfig) -> None:
         )
 
 
+async def resolve_destination(client: TelegramClient, destination: str) -> Any:
+    try:
+        return await client.get_entity(destination)
+    except ValueError:
+        pass
+
+    async for dialog in client.iter_dialogs():
+        title = getattr(dialog, "name", None) or getattr(dialog.entity, "title", None)
+        if title == destination:
+            return dialog.entity
+
+    raise RuntimeError(
+        f"Destination '{destination}' was not found by username, ID, or dialog title"
+    )
+
+
 async def process_message(client: TelegramClient, config: BotConfig, event: Any) -> None:
     text = event.raw_text or ""
     if text and is_arabic_text(text):

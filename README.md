@@ -85,6 +85,10 @@ not save it in Git, logs, screenshots, Supabase tables, or frontend code. The bo
 fails immediately instead of prompting for a login code if the supplied string
 is invalid or expired.
 
+The destination can be configured as a Telegram username, numeric entity, or an
+exact dialog title. Title lookup is performed at startup because StringSession
+does not persist Telethon's entity cache.
+
 ## External server deployment
 For a server deployment, prepare the following:
 - A Linux server with Docker installed
