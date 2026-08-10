@@ -1,0 +1,9 @@
+services:
+  telegram-translator:
+    build: .
+    container_name: telegram-translator
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
