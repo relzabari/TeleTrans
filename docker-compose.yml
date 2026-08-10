@@ -3,6 +3,8 @@ services:
     build: .
     container_name: telegram-translator
     restart: unless-stopped
+    ports:
+      - "${PORT:-10000}:${PORT:-10000}"
     volumes:
       - ./data:/app/data
     env_file:

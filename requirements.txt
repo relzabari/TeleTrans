@@ -3,3 +3,5 @@ deep-translator
 python-dotenv
 langdetect
 supabase
+fastapi
+uvicorn

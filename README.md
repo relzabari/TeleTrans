@@ -48,6 +48,16 @@ docker compose up -d
 ```
 
 The container uses the local data directory for sessions and config.
+It exposes `GET /health` on port `10000` by default. The endpoint reports one
+of `starting`, `syncing`, `ready`, or `error`. Starting the web service also
+starts Telegram and automatically completes any messages after the saved
+checkpoints.
+
+Run the Render-compatible web process locally with:
+
+```bash
+python -m app.web
+```
 
 ## Missed-message completion
 The bot keeps a separate Telegram message checkpoint for every source channel.
