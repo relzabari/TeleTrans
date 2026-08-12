@@ -71,6 +71,9 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(3, count)
         self.assertEqual([4, 5, 6], processed)
         self.assertEqual(6, await self.store.get(-1000000000123))
+        self.assertEqual(3, manager.processed_messages)
+        self.assertIsNotNone(manager.last_progress_at)
+        self.assertIsNone(manager.current_message_id)
 
     async def test_failed_message_is_retried_without_skipping_following_messages(self):
         processed = []
@@ -95,6 +98,7 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual([4], processed)
         self.assertEqual(4, await self.store.get(-1000000000123))
+        self.assertEqual(5, manager.current_message_id)
 
     @staticmethod
     async def _record(processed, message):

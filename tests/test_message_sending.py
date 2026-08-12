@@ -32,6 +32,32 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
         )
         cleanup.assert_called_once_with("media.jpg")
 
+    async def test_media_failure_sends_text_fallback(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(destination="destination")
+        event = SimpleNamespace(
+            id=42,
+            raw_text="مرحبا",
+            get_chat=AsyncMock(return_value=SimpleNamespace(title="מקור")),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch("app.telegram_client.translate_to_hebrew", return_value="שלום"),
+            patch("app.telegram_client.is_supported_media", return_value=True),
+            patch(
+                "app.telegram_client.download_media",
+                AsyncMock(side_effect=TimeoutError),
+            ),
+            patch("app.telegram_client.cleanup_file") as cleanup,
+        ):
+            await process_message(client, config, event)
+
+        client.send_file.assert_not_awaited()
+        client.send_message.assert_awaited_once()
+        self.assertIn("המדיה לא צורפה", client.send_message.await_args.args[1])
+        cleanup.assert_called_once_with(None)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,6 +20,10 @@ from app.translator import is_arabic_text, translate_to_hebrew
 
 logger = logging.getLogger(__name__)
 
+TRANSLATION_TIMEOUT_SECONDS = 60
+MEDIA_TIMEOUT_SECONDS = 120
+SEND_TIMEOUT_SECONDS = 120
+
 
 def create_client(config: BotConfig) -> TelegramClient:
     session = (
@@ -64,21 +68,43 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
     if text and is_arabic_text(text):
         chat = await event.get_chat()
         title = getattr(chat, "title", "") or "Unknown"
-        translated = await asyncio.to_thread(translate_to_hebrew, text)
+        translated = await asyncio.wait_for(
+            asyncio.to_thread(translate_to_hebrew, text),
+            timeout=TRANSLATION_TIMEOUT_SECONDS,
+        )
         message = build_message(text, title, translated)
 
         if is_supported_media(event):
-            path = await download_media(event)
+            path = None
             try:
+                path = await asyncio.wait_for(
+                    download_media(event), timeout=MEDIA_TIMEOUT_SECONDS
+                )
                 if len(message) <= MEDIA_CAPTION_LIMIT:
-                    await client.send_file(config.destination, path, caption=message)
+                    await asyncio.wait_for(
+                        client.send_file(config.destination, path, caption=message),
+                        timeout=SEND_TIMEOUT_SECONDS,
+                    )
                 else:
-                    await client.send_file(
-                        config.destination,
-                        path,
-                        caption=build_media_caption(title),
+                    await asyncio.wait_for(
+                        client.send_file(
+                            config.destination,
+                            path,
+                            caption=build_media_caption(title),
+                        ),
+                        timeout=SEND_TIMEOUT_SECONDS,
                     )
                     await send_text_chunks(client, config.destination, message)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "Media unavailable for message %s (%s); sending text fallback",
+                    getattr(event, "id", "unknown"),
+                    type(exc).__name__,
+                )
+                fallback = f"⚠️ המדיה לא צורפה עקב שגיאת הורדה או שליחה.\n\n{message}"
+                await send_text_chunks(client, config.destination, fallback)
             finally:
                 cleanup_file(path)
         else:
@@ -87,7 +113,9 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
 
 async def send_text_chunks(client: TelegramClient, destination: Any, text: str) -> None:
     for chunk in split_message(text):
-        await client.send_message(destination, chunk)
+        await asyncio.wait_for(
+            client.send_message(destination, chunk), timeout=SEND_TIMEOUT_SECONDS
+        )
 
 
 def register_handlers(

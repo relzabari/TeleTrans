@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
+from datetime import datetime, timezone
 from typing import Any
 
 from app.checkpoints import CheckpointStore
@@ -34,6 +35,9 @@ class CompletionManager:
         self.process_message = process_message
         self.chat_id_resolver = chat_id_resolver
         self._locks: dict[int, asyncio.Lock] = {}
+        self.current_message_id: int | None = None
+        self.processed_messages = 0
+        self.last_progress_at: str | None = None
 
     async def initialize(self) -> None:
         """Set a safe starting point for channels that have no checkpoint yet."""
@@ -70,12 +74,16 @@ class CompletionManager:
             async for message in self.client.iter_messages(
                 entity, min_id=checkpoint, reverse=True
             ):
+                self.current_message_id = int(message.id)
                 await self.process_message(message)
                 await self.store.set(chat_id, source_name, int(message.id))
                 processed += 1
+                self.processed_messages += 1
+                self.last_progress_at = datetime.now(timezone.utc).isoformat()
 
             if processed:
                 logger.info("Completed %s missing messages for %s", processed, source_name)
+            self.current_message_id = None
             return processed
 
     @staticmethod

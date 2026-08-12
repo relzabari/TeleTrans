@@ -57,13 +57,22 @@ class BotRuntime:
         if self.status == "error":
             raise RuntimeError(self.last_error or "Telegram runtime failed")
 
-    def health(self) -> dict[str, str | None]:
-        return {
+    def health(self) -> dict[str, str | int | None]:
+        health: dict[str, str | int | None] = {
             "status": self.status,
             "started_at": self.started_at,
             "last_synced_at": self.last_synced_at,
             "error": self.last_error if self.status == "error" else None,
         }
+        if self.completion:
+            health.update(
+                {
+                    "current_message_id": self.completion.current_message_id,
+                    "processed_messages": self.completion.processed_messages,
+                    "last_progress_at": self.completion.last_progress_at,
+                }
+            )
+        return health
 
     async def _run(self) -> None:
         try:
