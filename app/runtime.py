@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from datetime import datetime, timezone
 from typing import Any
 
 from app.checkpoints import FileCheckpointStore, SupabaseCheckpointStore
@@ -16,6 +15,7 @@ from app.telegram_client import (
     resolve_destination,
     start_client,
 )
+from app.time_utils import israel_now
 
 logger = logging.getLogger(__name__)
 
@@ -126,4 +126,4 @@ class BotRuntime:
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return israel_now()

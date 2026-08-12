@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
-from datetime import datetime, timezone
 from typing import Any
 
 from app.checkpoints import CheckpointStore
+from app.time_utils import israel_now
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,7 @@ class CompletionManager:
                 await self.store.set(chat_id, source_name, int(message.id))
                 processed += 1
                 self.processed_messages += 1
-                self.last_progress_at = datetime.now(timezone.utc).isoformat()
+                self.last_progress_at = israel_now()
 
             if processed:
                 logger.info("Completed %s missing messages for %s", processed, source_name)
