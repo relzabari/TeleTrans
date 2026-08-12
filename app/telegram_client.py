@@ -9,7 +9,12 @@ from telethon.sessions import StringSession
 
 from app.config import BotConfig
 from app.completion import CompletionManager
-from app.formatter import build_message
+from app.formatter import (
+    MEDIA_CAPTION_LIMIT,
+    build_media_caption,
+    build_message,
+    split_message,
+)
 from app.media import cleanup_file, download_media, is_supported_media
 from app.translator import is_arabic_text, translate_to_hebrew
 
@@ -65,11 +70,24 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
         if is_supported_media(event):
             path = await download_media(event)
             try:
-                await client.send_file(config.destination, path, caption=message)
+                if len(message) <= MEDIA_CAPTION_LIMIT:
+                    await client.send_file(config.destination, path, caption=message)
+                else:
+                    await client.send_file(
+                        config.destination,
+                        path,
+                        caption=build_media_caption(title),
+                    )
+                    await send_text_chunks(client, config.destination, message)
             finally:
                 cleanup_file(path)
         else:
-            await client.send_message(config.destination, message)
+            await send_text_chunks(client, config.destination, message)
+
+
+async def send_text_chunks(client: TelegramClient, destination: Any, text: str) -> None:
+    for chunk in split_message(text):
+        await client.send_message(destination, chunk)
 
 
 def register_handlers(
