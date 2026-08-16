@@ -7,9 +7,10 @@ def build_message(
     source_title: str,
     translated_source_title: str,
     translated_text: str,
+    source_username: str | None = None,
 ) -> str:
     return (
-        f"מקור: {source_title} - {translated_source_title}\n\n"
+        f"{build_source_header(source_title, translated_source_title, source_username)}\n\n"
         f"{translated_text}\n\n"
         f"────────────────────\n\n"
         f"הודעה מקורית:\n\n"
@@ -17,8 +18,22 @@ def build_message(
     )
 
 
-def build_media_caption(source_title: str, translated_source_title: str) -> str:
-    return f"מקור: {source_title} - {translated_source_title}"
+def build_media_caption(
+    source_title: str,
+    translated_source_title: str,
+    source_username: str | None = None,
+) -> str:
+    return build_source_header(source_title, translated_source_title, source_username)
+
+
+def build_source_header(
+    source_title: str,
+    translated_source_title: str,
+    source_username: str | None = None,
+) -> str:
+    username = source_username.strip().lstrip("@") if source_username else ""
+    username_suffix = f" (@{username})" if username else ""
+    return f"מקור: {source_title} - {translated_source_title}{username_suffix}"
 
 
 def split_message(text: str, limit: int = TEXT_MESSAGE_LIMIT) -> list[str]:

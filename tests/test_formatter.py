@@ -5,15 +5,27 @@ from app.formatter import build_media_caption, build_message, split_message
 
 class FormatterTests(unittest.TestCase):
     def test_build_message_contains_source_and_translation(self):
-        message = build_message("مرحبا", "قناة المصدر", "ערוץ מקור", "שלום")
+        message = build_message(
+            "مرحبا",
+            "قناة المصدر",
+            "ערוץ מקור",
+            "שלום",
+            source_username="source_channel",
+        )
 
-        self.assertIn("מקור: قناة المصدر - ערוץ מקור", message)
+        self.assertIn("מקור: قناة المصدر - ערוץ מקור (@source_channel)", message)
         self.assertIn("שלום", message)
         self.assertIn("مرحبا", message)
         self.assertIn("הודעה מקורית:", message)
         self.assertNotIn("🇸🇦", message)
 
     def test_media_caption_contains_only_source(self):
+        self.assertEqual(
+            "מקור: قناة المصدر - ערוץ מקור (@source_channel)",
+            build_media_caption("قناة المصدر", "ערוץ מקור", "@source_channel"),
+        )
+
+    def test_source_username_is_optional(self):
         self.assertEqual(
             "מקור: قناة المصدر - ערוץ מקור",
             build_media_caption("قناة المصدر", "ערוץ מקור"),

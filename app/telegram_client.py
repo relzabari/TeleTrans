@@ -68,6 +68,7 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
     if text and is_arabic_text(text):
         chat = await event.get_chat()
         title = getattr(chat, "title", "") or "Unknown"
+        username = getattr(chat, "username", None)
         translated = await asyncio.wait_for(
             asyncio.to_thread(translate_to_hebrew, text),
             timeout=TRANSLATION_TIMEOUT_SECONDS,
@@ -76,7 +77,13 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             asyncio.to_thread(translate_to_hebrew, title),
             timeout=TRANSLATION_TIMEOUT_SECONDS,
         )
-        message = build_message(text, title, translated_title, translated)
+        message = build_message(
+            text,
+            title,
+            translated_title,
+            translated,
+            source_username=username,
+        )
 
         if is_supported_media(event):
             path = None
@@ -94,7 +101,11 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
                         client.send_file(
                             config.destination,
                             path,
-                            caption=build_media_caption(title, translated_title),
+                            caption=build_media_caption(
+                                title,
+                                translated_title,
+                                source_username=username,
+                            ),
                         ),
                         timeout=SEND_TIMEOUT_SECONDS,
                     )

@@ -1,4 +1,13 @@
 {
-  "source_channels": ["PalpostN"],
+  "source_channels": [
+    "PalpostN",
+    "walaatdiscu",
+    "Ramallah_ii",
+    "raskarkarpal2",
+    "almzraa20233",
+    "raskarkarpal",
+    "bitllo_news1",
+    "aljania1"
+  ],
   "destination": "ערבית מתורגם"
 }

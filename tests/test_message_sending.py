@@ -11,7 +11,9 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
         config = SimpleNamespace(destination="destination")
         event = SimpleNamespace(
             raw_text="ا" * 1200,
-            get_chat=AsyncMock(return_value=SimpleNamespace(title="מקור")),
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(title="מקור", username="source_channel")
+            ),
         )
 
         with (
@@ -27,7 +29,9 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
             await process_message(client, config, event)
 
         client.send_file.assert_awaited_once_with(
-            "destination", "media.jpg", caption="מקור: מקור - מקור מתורגם"
+            "destination",
+            "media.jpg",
+            caption="מקור: מקור - מקור מתורגם (@source_channel)",
         )
         self.assertGreaterEqual(client.send_message.await_count, 1)
         self.assertTrue(
