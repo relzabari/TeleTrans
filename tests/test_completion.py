@@ -53,6 +53,10 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(0, count)
         self.assertEqual([], processed)
         self.assertEqual(3, await self.store.get(-1000000000123))
+        channel = manager.health_channels()["source"]
+        self.assertEqual("ready", channel["state"])
+        self.assertEqual(3, channel["last_message_id"])
+        self.assertIsNotNone(channel["last_checked_at"])
 
     async def test_sync_processes_only_missing_messages_in_order(self):
         processed = []
@@ -74,6 +78,11 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(3, manager.processed_messages)
         self.assertIsNotNone(manager.last_progress_at)
         self.assertIsNone(manager.current_message_id)
+        channel = manager.health_channels()["source"]
+        self.assertEqual("ready", channel["state"])
+        self.assertEqual(6, channel["last_message_id"])
+        self.assertEqual(3, channel["processed_messages"])
+        self.assertIsNotNone(channel["last_processed_at"])
 
     async def test_failed_message_is_retried_without_skipping_following_messages(self):
         processed = []
@@ -99,6 +108,11 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([4], processed)
         self.assertEqual(4, await self.store.get(-1000000000123))
         self.assertEqual(5, manager.current_message_id)
+        channel = manager.health_channels()["source"]
+        self.assertEqual("error", channel["state"])
+        self.assertEqual(4, channel["last_message_id"])
+        self.assertEqual(5, channel["current_message_id"])
+        self.assertIn("RuntimeError", channel["error"])
 
     @staticmethod
     async def _record(processed, message):
