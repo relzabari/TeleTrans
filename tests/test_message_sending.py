@@ -6,6 +6,35 @@ from app.telegram_client import process_message
 
 
 class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_source_title_translation_failure_does_not_block_message(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(destination="destination")
+        event = SimpleNamespace(
+            raw_text="مرحبا",
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(
+                    title="فلسطين بوست", username="PalpostN"
+                )
+            ),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=["שלום", RuntimeError("title translation failed")],
+            ),
+            patch("app.telegram_client.is_supported_media", return_value=False),
+        ):
+            await process_message(client, config, event)
+
+        client.send_message.assert_awaited_once()
+        sent_message = client.send_message.await_args.args[1]
+        self.assertIn(
+            "מקור: فلسطين بوست - فلسطين بوست (@PalpostN)", sent_message
+        )
+        self.assertIn("שלום", sent_message)
+
     async def test_long_media_message_uses_short_caption_and_text_chunks(self):
         client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
         config = SimpleNamespace(destination="destination")

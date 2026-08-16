@@ -73,10 +73,20 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             asyncio.to_thread(translate_to_hebrew, text),
             timeout=TRANSLATION_TIMEOUT_SECONDS,
         )
-        translated_title = await asyncio.wait_for(
-            asyncio.to_thread(translate_to_hebrew, title),
-            timeout=TRANSLATION_TIMEOUT_SECONDS,
-        )
+        try:
+            translated_title = await asyncio.wait_for(
+                asyncio.to_thread(translate_to_hebrew, title),
+                timeout=TRANSLATION_TIMEOUT_SECONDS,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Could not translate source title %r (%s); using original title",
+                title,
+                type(exc).__name__,
+            )
+            translated_title = title
         message = build_message(
             text,
             title,
