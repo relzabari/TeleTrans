@@ -5,14 +5,19 @@ from app.formatter import build_media_caption, build_message, split_message
 
 class FormatterTests(unittest.TestCase):
     def test_build_message_contains_source_and_translation(self):
-        message = build_message("مرحبا", "ערוץ מקור", "שלום")
+        message = build_message("مرحبا", "قناة المصدر", "ערוץ מקור", "שלום")
 
-        self.assertIn("מקור: ערוץ מקור", message)
+        self.assertIn("מקור: قناة المصدر - ערוץ מקור", message)
         self.assertIn("שלום", message)
         self.assertIn("مرحبا", message)
+        self.assertIn("הודעה מקורית:", message)
+        self.assertNotIn("🇸🇦", message)
 
     def test_media_caption_contains_only_source(self):
-        self.assertEqual("מקור: ערוץ מקור", build_media_caption("ערוץ מקור"))
+        self.assertEqual(
+            "מקור: قناة المصدر - ערוץ מקור",
+            build_media_caption("قناة المصدر", "ערוץ מקור"),
+        )
 
     def test_split_message_preserves_content_within_limit(self):
         text = "פסקה ראשונה\n\n" + ("מילה " * 30) + "סוף"

@@ -72,7 +72,11 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             asyncio.to_thread(translate_to_hebrew, text),
             timeout=TRANSLATION_TIMEOUT_SECONDS,
         )
-        message = build_message(text, title, translated)
+        translated_title = await asyncio.wait_for(
+            asyncio.to_thread(translate_to_hebrew, title),
+            timeout=TRANSLATION_TIMEOUT_SECONDS,
+        )
+        message = build_message(text, title, translated_title, translated)
 
         if is_supported_media(event):
             path = None
@@ -90,7 +94,7 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
                         client.send_file(
                             config.destination,
                             path,
-                            caption=build_media_caption(title),
+                            caption=build_media_caption(title, translated_title),
                         ),
                         timeout=SEND_TIMEOUT_SECONDS,
                     )

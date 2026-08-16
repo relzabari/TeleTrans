@@ -16,7 +16,10 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch("app.telegram_client.is_arabic_text", return_value=True),
-            patch("app.telegram_client.translate_to_hebrew", return_value="ת" * 1200),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=["ת" * 1200, "מקור מתורגם"],
+            ),
             patch("app.telegram_client.is_supported_media", return_value=True),
             patch("app.telegram_client.download_media", AsyncMock(return_value="media.jpg")),
             patch("app.telegram_client.cleanup_file") as cleanup,
@@ -24,7 +27,7 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
             await process_message(client, config, event)
 
         client.send_file.assert_awaited_once_with(
-            "destination", "media.jpg", caption="מקור: מקור"
+            "destination", "media.jpg", caption="מקור: מקור - מקור מתורגם"
         )
         self.assertGreaterEqual(client.send_message.await_count, 1)
         self.assertTrue(
