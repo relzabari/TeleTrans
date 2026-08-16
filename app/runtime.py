@@ -82,6 +82,10 @@ class BotRuntime:
             config.destination = await resolve_destination(
                 self.client, config.destination
             )
+            if config.important_destination:
+                config.important_destination = await resolve_destination(
+                    self.client, config.important_destination
+                )
 
             store = self._create_checkpoint_store(config)
             self.completion = CompletionManager(

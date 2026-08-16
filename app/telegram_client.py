@@ -11,10 +11,12 @@ from app.config import BotConfig
 from app.completion import CompletionManager
 from app.formatter import (
     MEDIA_CAPTION_LIMIT,
+    build_important_message,
     build_media_caption,
     build_message,
     split_message,
 )
+from app.keywords import find_matching_keywords
 from app.media import cleanup_file, download_media, is_supported_media
 from app.translator import is_arabic_text, translate_to_hebrew
 
@@ -90,6 +92,16 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
                 f"הודעה מקורית:\n\n{text}"
             )
             await send_text_chunks(client, config.destination, fallback)
+            matches = find_matching_keywords(
+                text, "", getattr(config, "important_keywords", [])
+            )
+            important_destination = getattr(config, "important_destination", None)
+            if matches and important_destination:
+                await send_text_chunks(
+                    client,
+                    important_destination,
+                    build_important_message(fallback, matches),
+                )
             return
         try:
             translated_title = await translate_with_retry(title, "source title")
@@ -109,6 +121,15 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             translated,
             source_username=username,
         )
+        matches = find_matching_keywords(
+            text, translated, getattr(config, "important_keywords", [])
+        )
+        important_destination = getattr(config, "important_destination", None)
+        important_message = (
+            build_important_message(message, matches)
+            if matches and important_destination
+            else None
+        )
 
         if is_supported_media(event):
             path = None
@@ -116,39 +137,76 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
                 path = await asyncio.wait_for(
                     download_media(event), timeout=MEDIA_TIMEOUT_SECONDS
                 )
-                if len(message) <= MEDIA_CAPTION_LIMIT:
-                    await asyncio.wait_for(
-                        client.send_file(config.destination, path, caption=message),
-                        timeout=SEND_TIMEOUT_SECONDS,
-                    )
-                else:
-                    await asyncio.wait_for(
-                        client.send_file(
-                            config.destination,
-                            path,
-                            caption=build_media_caption(
-                                title,
-                                translated_title,
-                                source_username=username,
-                            ),
-                        ),
-                        timeout=SEND_TIMEOUT_SECONDS,
-                    )
-                    await send_text_chunks(client, config.destination, message)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 logger.warning(
-                    "Media unavailable for message %s (%s); sending text fallback",
+                    "Media download unavailable for message %s (%s); "
+                    "sending text fallback",
                     getattr(event, "id", "unknown"),
                     type(exc).__name__,
                 )
                 fallback = f"⚠️ המדיה לא צורפה עקב שגיאת הורדה או שליחה.\n\n{message}"
-                await send_text_chunks(client, config.destination, fallback)
+                try:
+                    await send_text_chunks(client, config.destination, fallback)
+                    if important_message:
+                        await send_text_chunks(
+                            client,
+                            important_destination,
+                            build_important_message(fallback, matches),
+                        )
+                finally:
+                    cleanup_file(path)
+                return
+
+            try:
+                source_caption = build_media_caption(
+                    title,
+                    translated_title,
+                    source_username=username,
+                )
+                await send_media_message(
+                    client,
+                    config.destination,
+                    path,
+                    message,
+                    source_caption,
+                )
+                if important_message:
+                    await send_media_message(
+                        client,
+                        important_destination,
+                        path,
+                        important_message,
+                        build_important_message(source_caption, matches),
+                    )
             finally:
                 cleanup_file(path)
         else:
             await send_text_chunks(client, config.destination, message)
+            if important_message:
+                await send_text_chunks(client, important_destination, important_message)
+
+
+async def send_media_message(
+    client: TelegramClient,
+    destination: Any,
+    path: Any,
+    message: str,
+    short_caption: str,
+) -> None:
+    if len(message) <= MEDIA_CAPTION_LIMIT:
+        await asyncio.wait_for(
+            client.send_file(destination, path, caption=message),
+            timeout=SEND_TIMEOUT_SECONDS,
+        )
+        return
+
+    await asyncio.wait_for(
+        client.send_file(destination, path, caption=short_caption),
+        timeout=SEND_TIMEOUT_SECONDS,
+    )
+    await send_text_chunks(client, destination, message)
 
 
 async def translate_with_retry(text: str, purpose: str) -> str:

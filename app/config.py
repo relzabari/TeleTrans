@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -20,6 +21,8 @@ class BotConfig:
     checkpoint_path: Path
     supabase_url: str | None
     supabase_key: str | None
+    important_destination: Any | None = None
+    important_keywords: list[str] = field(default_factory=list)
 
 
 def get_project_root() -> Path:
@@ -71,4 +74,10 @@ def load_config() -> BotConfig:
         checkpoint_path=root / "data" / "checkpoints.json",
         supabase_url=os.getenv("SUPABASE_URL") or None,
         supabase_key=os.getenv("SUPABASE_KEY") or None,
+        important_destination=raw_config.get("important_destination") or None,
+        important_keywords=[
+            str(keyword).strip()
+            for keyword in raw_config.get("important_keywords", [])
+            if str(keyword).strip()
+        ],
     )

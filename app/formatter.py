@@ -2,6 +2,11 @@ MEDIA_CAPTION_LIMIT = 1024
 TEXT_MESSAGE_LIMIT = 4096
 
 
+def build_important_message(message: str, matched_keywords: list[str]) -> str:
+    matches = ", ".join(matched_keywords)
+    return f"🚨 מילות מפתח שזוהו: {matches}\n\n{message}"
+
+
 def build_message(
     original_text: str,
     source_title: str,

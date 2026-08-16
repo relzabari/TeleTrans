@@ -6,6 +6,100 @@ from app.telegram_client import process_message
 
 
 class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_keyword_match_sends_message_to_both_destinations(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(
+            destination="destination",
+            important_destination="important",
+            important_keywords=["صاروخ", "נריה"],
+        )
+        event = SimpleNamespace(
+            raw_text="إطلاق صاروخ",
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(title="قناة", username="channel")
+            ),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=["דיווח באזור נריה", "ערוץ"],
+            ),
+            patch("app.telegram_client.is_supported_media", return_value=False),
+        ):
+            await process_message(client, config, event)
+
+        self.assertEqual(2, client.send_message.await_count)
+        normal_call, important_call = client.send_message.await_args_list
+        self.assertEqual("destination", normal_call.args[0])
+        self.assertNotIn("🚨", normal_call.args[1])
+        self.assertEqual("important", important_call.args[0])
+        self.assertIn("🚨 מילות מפתח שזוהו: صاروخ, נריה", important_call.args[1])
+
+    async def test_no_keyword_match_sends_only_to_normal_destination(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(
+            destination="destination",
+            important_destination="important",
+            important_keywords=["פיגוע"],
+        )
+        event = SimpleNamespace(
+            raw_text="خبر عادي",
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(title="قناة", username="channel")
+            ),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=["דיווח רגיל", "ערוץ"],
+            ),
+            patch("app.telegram_client.is_supported_media", return_value=False),
+        ):
+            await process_message(client, config, event)
+
+        client.send_message.assert_awaited_once()
+        self.assertEqual("destination", client.send_message.await_args.args[0])
+
+    async def test_keyword_media_is_downloaded_once_and_sent_to_both_destinations(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(
+            destination="destination",
+            important_destination="important",
+            important_keywords=["صاروخ"],
+        )
+        event = SimpleNamespace(
+            raw_text="صاروخ",
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(title="قناة", username="channel")
+            ),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=["טיל", "ערוץ"],
+            ),
+            patch("app.telegram_client.is_supported_media", return_value=True),
+            patch(
+                "app.telegram_client.download_media",
+                AsyncMock(return_value="media.jpg"),
+            ) as download,
+            patch("app.telegram_client.cleanup_file") as cleanup,
+        ):
+            await process_message(client, config, event)
+
+        download.assert_awaited_once_with(event)
+        self.assertEqual(2, client.send_file.await_count)
+        self.assertEqual("destination", client.send_file.await_args_list[0].args[0])
+        self.assertEqual("important", client.send_file.await_args_list[1].args[0])
+        self.assertIn("🚨", client.send_file.await_args_list[1].kwargs["caption"])
+        cleanup.assert_called_once_with("media.jpg")
+
     async def test_message_translation_retries_then_succeeds(self):
         client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
         config = SimpleNamespace(destination="destination")
