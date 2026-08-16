@@ -21,6 +21,8 @@ from app.translator import is_arabic_text, translate_to_hebrew
 logger = logging.getLogger(__name__)
 
 TRANSLATION_TIMEOUT_SECONDS = 60
+TRANSLATION_ATTEMPTS = 3
+TRANSLATION_RETRY_DELAY_SECONDS = 2
 MEDIA_TIMEOUT_SECONDS = 120
 SEND_TIMEOUT_SECONDS = 120
 
@@ -69,15 +71,28 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
         chat = await event.get_chat()
         title = getattr(chat, "title", "") or "Unknown"
         username = getattr(chat, "username", None)
-        translated = await asyncio.wait_for(
-            asyncio.to_thread(translate_to_hebrew, text),
-            timeout=TRANSLATION_TIMEOUT_SECONDS,
-        )
         try:
-            translated_title = await asyncio.wait_for(
-                asyncio.to_thread(translate_to_hebrew, title),
-                timeout=TRANSLATION_TIMEOUT_SECONDS,
+            translated = await translate_with_retry(text, "message")
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error(
+                "Could not translate message %s after %s attempts (%s); "
+                "sending untranslated fallback",
+                getattr(event, "id", "unknown"),
+                TRANSLATION_ATTEMPTS,
+                type(exc).__name__,
             )
+            username_suffix = f" (@{str(username).lstrip('@')})" if username else ""
+            fallback = (
+                "⚠️ תרגום ההודעה נכשל לאחר מספר ניסיונות.\n\n"
+                f"מקור: {title}{username_suffix}\n\n"
+                f"הודעה מקורית:\n\n{text}"
+            )
+            await send_text_chunks(client, config.destination, fallback)
+            return
+        try:
+            translated_title = await translate_with_retry(title, "source title")
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -134,6 +149,33 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
                 cleanup_file(path)
         else:
             await send_text_chunks(client, config.destination, message)
+
+
+async def translate_with_retry(text: str, purpose: str) -> str:
+    last_error: Exception | None = None
+    for attempt in range(1, TRANSLATION_ATTEMPTS + 1):
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(translate_to_hebrew, text),
+                timeout=TRANSLATION_TIMEOUT_SECONDS,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            last_error = exc
+            if attempt == TRANSLATION_ATTEMPTS:
+                break
+            logger.warning(
+                "Could not translate %s on attempt %s/%s (%s); retrying",
+                purpose,
+                attempt,
+                TRANSLATION_ATTEMPTS,
+                type(exc).__name__,
+            )
+            await asyncio.sleep(TRANSLATION_RETRY_DELAY_SECONDS)
+
+    assert last_error is not None
+    raise last_error
 
 
 async def send_text_chunks(client: TelegramClient, destination: Any, text: str) -> None:

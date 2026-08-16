@@ -6,6 +6,60 @@ from app.telegram_client import process_message
 
 
 class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_message_translation_retries_then_succeeds(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(destination="destination")
+        event = SimpleNamespace(
+            raw_text="مرحبا",
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(title="قناة", username="channel")
+            ),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=[RuntimeError("temporary"), "שלום", "ערוץ"],
+            ) as translate,
+            patch("app.telegram_client.asyncio.sleep", AsyncMock()) as sleep,
+            patch("app.telegram_client.is_supported_media", return_value=False),
+        ):
+            await process_message(client, config, event)
+
+        self.assertEqual(3, translate.call_count)
+        sleep.assert_awaited_once_with(2)
+        self.assertIn("שלום", client.send_message.await_args.args[1])
+
+    async def test_message_translation_failure_sends_fallback_and_continues(self):
+        client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
+        config = SimpleNamespace(destination="destination")
+        event = SimpleNamespace(
+            id=602725,
+            raw_text="مستوطنون يعربدون",
+            get_chat=AsyncMock(
+                return_value=SimpleNamespace(title="فلسطين بوست", username="PalpostN")
+            ),
+        )
+
+        with (
+            patch("app.telegram_client.is_arabic_text", return_value=True),
+            patch(
+                "app.telegram_client.translate_to_hebrew",
+                side_effect=RuntimeError("translation unavailable"),
+            ) as translate,
+            patch("app.telegram_client.asyncio.sleep", AsyncMock()),
+            patch("app.telegram_client.is_supported_media", return_value=False),
+        ):
+            await process_message(client, config, event)
+
+        self.assertEqual(3, translate.call_count)
+        client.send_message.assert_awaited_once()
+        fallback = client.send_message.await_args.args[1]
+        self.assertIn("תרגום ההודעה נכשל", fallback)
+        self.assertIn("مستوطنون يعربدون", fallback)
+        self.assertIn("@PalpostN", fallback)
+
     async def test_source_title_translation_failure_does_not_block_message(self):
         client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
         config = SimpleNamespace(destination="destination")
@@ -22,8 +76,14 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
             patch("app.telegram_client.is_arabic_text", return_value=True),
             patch(
                 "app.telegram_client.translate_to_hebrew",
-                side_effect=["שלום", RuntimeError("title translation failed")],
+                side_effect=[
+                    "שלום",
+                    RuntimeError("title translation failed"),
+                    RuntimeError("title translation failed"),
+                    RuntimeError("title translation failed"),
+                ],
             ),
+            patch("app.telegram_client.asyncio.sleep", AsyncMock()),
             patch("app.telegram_client.is_supported_media", return_value=False),
         ):
             await process_message(client, config, event)
