@@ -19,6 +19,7 @@ from app.formatter import (
 from app.keywords import find_matching_keywords
 from app.media import cleanup_file, download_media, is_supported_media
 from app.translator import is_arabic_text, translate_to_hebrew
+from app.time_utils import format_israel_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +74,7 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
         chat = await event.get_chat()
         title = getattr(chat, "title", "") or "Unknown"
         username = getattr(chat, "username", None)
+        original_sent_at = format_israel_datetime(getattr(event, "date", None))
         try:
             translated = await translate_with_retry(text, "message")
         except asyncio.CancelledError:
@@ -89,7 +91,12 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             fallback = (
                 "⚠️ תרגום ההודעה נכשל לאחר מספר ניסיונות.\n\n"
                 f"מקור: {title}{username_suffix}\n\n"
-                f"הודעה מקורית:\n\n{text}"
+                + (
+                    f"זמן פרסום מקורי: {original_sent_at} (שעון ישראל)\n\n"
+                    if original_sent_at
+                    else ""
+                )
+                + f"הודעה מקורית:\n\n{text}"
             )
             await send_text_chunks(client, config.destination, fallback)
             matches = find_matching_keywords(
@@ -120,6 +127,7 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             translated_title,
             translated,
             source_username=username,
+            original_sent_at=original_sent_at,
         )
         matches = find_matching_keywords(
             text, translated, getattr(config, "important_keywords", [])
@@ -164,6 +172,7 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
                     title,
                     translated_title,
                     source_username=username,
+                    original_sent_at=original_sent_at,
                 )
                 await send_media_message(
                     client,

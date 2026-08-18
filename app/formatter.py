@@ -13,9 +13,16 @@ def build_message(
     translated_source_title: str,
     translated_text: str,
     source_username: str | None = None,
+    original_sent_at: str | None = None,
 ) -> str:
+    timestamp = (
+        f"\nזמן פרסום מקורי: {original_sent_at} (שעון ישראל)"
+        if original_sent_at
+        else ""
+    )
     return (
-        f"{build_source_header(source_title, translated_source_title, source_username)}\n\n"
+        f"{build_source_header(source_title, translated_source_title, source_username)}"
+        f"{timestamp}\n\n"
         f"{translated_text}\n\n"
         f"────────────────────\n\n"
         f"הודעה מקורית:\n\n"
@@ -27,8 +34,14 @@ def build_media_caption(
     source_title: str,
     translated_source_title: str,
     source_username: str | None = None,
+    original_sent_at: str | None = None,
 ) -> str:
-    return build_source_header(source_title, translated_source_title, source_username)
+    header = build_source_header(
+        source_title, translated_source_title, source_username
+    )
+    if original_sent_at:
+        return f"{header}\nזמן פרסום מקורי: {original_sent_at} (שעון ישראל)"
+    return header
 
 
 def build_source_header(

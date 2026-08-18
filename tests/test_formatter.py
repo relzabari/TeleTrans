@@ -11,12 +11,14 @@ class FormatterTests(unittest.TestCase):
             "ערוץ מקור",
             "שלום",
             source_username="source_channel",
+            original_sent_at="18/08/2026 14:35",
         )
 
         self.assertIn("מקור: قناة المصدر - ערוץ מקור (@source_channel)", message)
         self.assertIn("שלום", message)
         self.assertIn("مرحبا", message)
         self.assertIn("הודעה מקורית:", message)
+        self.assertIn("זמן פרסום מקורי: 18/08/2026 14:35 (שעון ישראל)", message)
         self.assertNotIn("🇸🇦", message)
 
     def test_media_caption_contains_only_source(self):
