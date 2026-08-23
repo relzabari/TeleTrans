@@ -33,6 +33,20 @@ class FormatterTests(unittest.TestCase):
             build_media_caption("قناة المصدر", "ערוץ מקור"),
         )
 
+    def test_media_caption_includes_original_timestamp(self):
+        self.assertEqual(
+            "מקור: قناة - ערוץ (@channel)\n"
+            "זמן פרסום מקורי: 18/08/2026 14:35 (שעון ישראל)",
+            build_media_caption(
+                "قناة", "ערוץ", "channel", "18/08/2026 14:35"
+            ),
+        )
+
+    def test_split_message_rejects_invalid_limit_and_returns_short_text(self):
+        with self.assertRaises(ValueError):
+            split_message("text", limit=0)
+        self.assertEqual(["short"], split_message("short", limit=10))
+
     def test_split_message_preserves_content_within_limit(self):
         text = "פסקה ראשונה\n\n" + ("מילה " * 30) + "סוף"
 

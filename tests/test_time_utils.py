@@ -17,6 +17,11 @@ class TimeUtilsTests(unittest.TestCase):
 
         self.assertEqual("18/08/2026 14:35", format_israel_datetime(timestamp))
 
+    def test_format_israel_datetime_handles_none_and_naive_utc(self):
+        self.assertIsNone(format_israel_datetime(None))
+        timestamp = datetime(2026, 1, 18, 11, 35)
+        self.assertEqual("18/01/2026 13:35", format_israel_datetime(timestamp))
+
 
 if __name__ == "__main__":
     unittest.main()

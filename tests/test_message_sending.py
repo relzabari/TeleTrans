@@ -124,7 +124,11 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_message_translation_failure_sends_fallback_and_continues(self):
         client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
-        config = SimpleNamespace(destination="destination")
+        config = SimpleNamespace(
+            destination="destination",
+            important_destination="important",
+            important_keywords=["Ù…Ø³ØªÙˆØ·Ù†ÙˆÙ†"],
+        )
         event = SimpleNamespace(
             id=602725,
             raw_text="مستوطنون يعربدون",
@@ -141,12 +145,13 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
             ) as translate,
             patch("app.telegram_client.asyncio.sleep", AsyncMock()),
             patch("app.telegram_client.is_supported_media", return_value=False),
+            patch("app.telegram_client.find_matching_keywords", return_value=["keyword"]),
         ):
             await process_message(client, config, event)
 
         self.assertEqual(3, translate.call_count)
-        client.send_message.assert_awaited_once()
-        fallback = client.send_message.await_args.args[1]
+        self.assertEqual(2, client.send_message.await_count)
+        fallback = client.send_message.await_args_list[0].args[1]
         self.assertIn("תרגום ההודעה נכשל", fallback)
         self.assertIn("مستوطنون يعربدون", fallback)
         self.assertIn("@PalpostN", fallback)

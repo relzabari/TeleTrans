@@ -9,6 +9,8 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+.coverage
+htmlcov/
 
 # Local Telegram media
 *.mp4
