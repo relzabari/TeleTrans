@@ -96,6 +96,7 @@ class BotRuntime:
                 process_message=lambda message: process_message(
                     self.client, config, message
                 ),
+                backfill_days=config.backfill_days,
             )
 
             await self.completion.initialize()

@@ -16,7 +16,7 @@ class FakeTelegramClient:
     async def get_entity(self, source):
         return self.entity
 
-    async def get_messages(self, entity, limit):
+    async def get_messages(self, entity, limit, offset_date=None):
         if not self.message_ids:
             return []
         return [SimpleNamespace(id=max(self.message_ids))]
@@ -122,6 +122,31 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(6, channel["last_message_id"])
         self.assertEqual(3, channel["processed_messages"])
         self.assertIsNotNone(channel["last_processed_at"])
+
+    async def test_backfill_limit_advances_old_checkpoint_before_processing(self):
+        processed = []
+        client = FakeTelegramClient([3, 50, 51, 52])
+        client.get_messages = AsyncMock(return_value=[SimpleNamespace(id=50)])
+        await self.store.set(-1000000000123, "source", 3)
+        manager = CompletionManager(
+            client,
+            ["source"],
+            self.store,
+            lambda message: self._record(processed, message),
+            chat_id_resolver=lambda entity: -1000000000123,
+            backfill_days=2,
+        )
+
+        count = await manager.sync_channel("source")
+
+        self.assertEqual(2, count)
+        self.assertEqual([51, 52], processed)
+        self.assertEqual(52, await self.store.get(-1000000000123))
+        self.assertEqual(1, client.get_messages.await_args.kwargs["limit"])
+        self.assertIsNotNone(client.get_messages.await_args.kwargs["offset_date"])
+
+        await manager.sync_channel("source")
+        client.get_messages.assert_awaited_once()
 
     async def test_sync_without_checkpoint_initializes_latest_and_returns_zero(self):
         processed = []

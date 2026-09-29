@@ -23,6 +23,7 @@ class BotConfig:
     supabase_key: str | None
     important_destination: Any | None = None
     important_keywords: list[str] = field(default_factory=list)
+    backfill_days: int = 2
 
 
 def get_project_root() -> Path:
@@ -34,6 +35,19 @@ def _get_required_env(key: str) -> str:
     if value is None or not str(value).strip():
         raise RuntimeError(f"Missing environment variable: {key}")
     return str(value).strip()
+
+
+def _get_nonnegative_int_env(key: str, default: int) -> int:
+    raw_value = os.getenv(key)
+    if raw_value is None or not raw_value.strip():
+        return default
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise RuntimeError(f"Environment variable {key} must be an integer") from exc
+    if value < 0:
+        raise RuntimeError(f"Environment variable {key} must be zero or greater")
+    return value
 
 
 def _resolve_config_path(root: Path) -> Path:
@@ -80,4 +94,5 @@ def load_config() -> BotConfig:
             for keyword in raw_config.get("important_keywords", [])
             if str(keyword).strip()
         ],
+        backfill_days=_get_nonnegative_int_env("BACKFILL_DAYS", 2),
     )

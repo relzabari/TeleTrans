@@ -33,6 +33,7 @@ TeleTrans is a Telegram bot that listens to messages from a configured source ch
    PHONE=your_phone_number
    TELEGRAM_SESSION=
    SUPABASE_URL=your_project_url
+   BACKFILL_DAYS=2
    SUPABASE_KEY=your_service_role_key
    ```
 4. Configure data/config.json
@@ -63,6 +64,10 @@ python -m app.web
 The bot keeps a separate Telegram message checkpoint for every source channel.
 On the first run it starts at the newest existing message. On later runs it
 processes every message after the saved checkpoint, from oldest to newest.
+
+`BACKFILL_DAYS` limits recovery after downtime. On startup, the bot skips
+messages older than this many days even if the saved checkpoint is older. It
+defaults to `2`; set it to `0` to start from the newest existing message.
 
 Without Supabase credentials, checkpoints are stored locally in
 `data/checkpoints.json`. For ephemeral hosting such as Render, run

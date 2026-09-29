@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable, Iterable
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.checkpoints import CheckpointStore
@@ -28,13 +29,16 @@ class CompletionManager:
         store: CheckpointStore,
         process_message: ProcessMessage,
         chat_id_resolver: ChatIdResolver = telegram_chat_id,
+        backfill_days: int | None = None,
     ) -> None:
         self.client = client
         self.source_channels = list(source_channels)
         self.store = store
         self.process_message = process_message
         self.chat_id_resolver = chat_id_resolver
+        self.backfill_days = backfill_days
         self._locks: dict[int, asyncio.Lock] = {}
+        self._backfill_applied: set[int] = set()
         self.current_message_id: int | None = None
         self.processed_messages = 0
         self.last_progress_at: str | None = None
@@ -82,9 +86,13 @@ class CompletionManager:
 
             processed = 0
             source_name = self._source_name(entity, str(source))
+            checkpoint = await self._apply_backfill_limit(
+                entity, chat_id, source_name, checkpoint
+            )
             status = self._ensure_channel_status(
                 entity, str(source), chat_id, checkpoint
             )
+            status["last_message_id"] = checkpoint
             status["state"] = "syncing"
             status["error"] = None
             try:
@@ -114,6 +122,34 @@ class CompletionManager:
             status["last_checked_at"] = israel_now()
             status["state"] = "ready"
             return processed
+
+    async def _apply_backfill_limit(
+        self, entity: Any, chat_id: int, source_name: str, checkpoint: int
+    ) -> int:
+        if self.backfill_days is None or chat_id in self._backfill_applied:
+            return checkpoint
+
+        cutoff = datetime.now(UTC) - timedelta(days=self.backfill_days)
+        messages = await self.client.get_messages(
+            entity, limit=1, offset_date=cutoff
+        )
+        self._backfill_applied.add(chat_id)
+        if not messages:
+            return checkpoint
+
+        cutoff_message_id = int(messages[0].id)
+        if cutoff_message_id <= checkpoint:
+            return checkpoint
+
+        await self.store.set(chat_id, source_name, cutoff_message_id)
+        logger.info(
+            "Advanced checkpoint for %s from %s to %s to enforce a %s-day backfill limit",
+            source_name,
+            checkpoint,
+            cutoff_message_id,
+            self.backfill_days,
+        )
+        return cutoff_message_id
 
     def health_channels(self) -> dict[str, dict[str, Any]]:
         return {

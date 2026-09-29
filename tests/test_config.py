@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from app.config import (
     _get_required_env,
+    _get_nonnegative_int_env,
     _resolve_config_path,
     _resolve_session_path,
     load_config,
@@ -15,6 +16,16 @@ from app.config import (
 
 
 class ConfigTests(unittest.TestCase):
+    def test_backfill_days_parsing_and_validation(self):
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertEqual(2, _get_nonnegative_int_env("BACKFILL_DAYS", 2))
+        with patch.dict(os.environ, {"BACKFILL_DAYS": " 7 "}, clear=True):
+            self.assertEqual(7, _get_nonnegative_int_env("BACKFILL_DAYS", 2))
+        for value in ("two", "-1"):
+            with patch.dict(os.environ, {"BACKFILL_DAYS": value}, clear=True):
+                with self.assertRaisesRegex(RuntimeError, "BACKFILL_DAYS"):
+                    _get_nonnegative_int_env("BACKFILL_DAYS", 2)
+
     def test_project_root_contains_application(self):
         self.assertTrue((get_project_root() / "app").is_dir())
 
@@ -79,6 +90,7 @@ class ConfigTests(unittest.TestCase):
                 "TELEGRAM_SESSION": "session",
                 "SUPABASE_URL": "url",
                 "SUPABASE_KEY": "key",
+                "BACKFILL_DAYS": "5",
             }
             with (
                 patch("app.config.get_project_root", return_value=root),
@@ -98,6 +110,7 @@ class ConfigTests(unittest.TestCase):
             self.assertEqual("key", config.supabase_key)
             self.assertEqual("important", config.important_destination)
             self.assertEqual(["word", "123"], config.important_keywords)
+            self.assertEqual(5, config.backfill_days)
             self.assertTrue(config.session_path.parent.exists())
 
 
