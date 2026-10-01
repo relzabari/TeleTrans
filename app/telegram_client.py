@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 TRANSLATION_TIMEOUT_SECONDS = 60
 TRANSLATION_ATTEMPTS = 3
 RATE_LIMIT_RETRY_DELAY_SECONDS = 60
+RATE_LIMIT_MAX_DELAY_SECONDS = 600
 SEND_TIMEOUT_SECONDS = 120
 
 
@@ -218,7 +219,9 @@ async def send_server_side_media_message(
 
 async def translate_with_retry(text: str, purpose: str) -> str:
     last_error: Exception | None = None
-    for attempt in range(1, TRANSLATION_ATTEMPTS + 1):
+    regular_failures = 0
+    rate_limit_failures = 0
+    while regular_failures < TRANSLATION_ATTEMPTS:
         try:
             return await asyncio.wait_for(
                 asyncio.to_thread(translate_to_hebrew, text),
@@ -226,24 +229,32 @@ async def translate_with_retry(text: str, purpose: str) -> str:
             )
         except asyncio.CancelledError:
             raise
+        except TooManyRequests:
+            rate_limit_failures += 1
+            delay = min(
+                RATE_LIMIT_RETRY_DELAY_SECONDS * (2 ** (rate_limit_failures - 1)),
+                RATE_LIMIT_MAX_DELAY_SECONDS,
+            )
+            logger.warning(
+                "Translation rate limit reached for %s; waiting %s seconds "
+                "before retry %s",
+                purpose,
+                delay,
+                rate_limit_failures + 1,
+            )
+            await asyncio.sleep(delay)
         except Exception as exc:
             last_error = exc
-            if attempt == TRANSLATION_ATTEMPTS:
+            regular_failures += 1
+            if regular_failures == TRANSLATION_ATTEMPTS:
                 break
             logger.warning(
                 "Could not translate %s on attempt %s/%s (%s); retrying",
                 purpose,
-                attempt,
+                regular_failures,
                 TRANSLATION_ATTEMPTS,
                 type(exc).__name__,
             )
-            if isinstance(exc, TooManyRequests):
-                delay = RATE_LIMIT_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
-                logger.warning(
-                    "Translation rate limit reached; waiting %s seconds before retry",
-                    delay,
-                )
-                await asyncio.sleep(delay)
 
     assert last_error is not None
     raise last_error

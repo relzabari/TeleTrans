@@ -155,6 +155,23 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("translated", result)
         self.assertEqual([60, 120], [call.args[0] for call in sleep.await_args_list])
 
+    async def test_translate_with_retry_does_not_give_up_on_rate_limits(self):
+        rate_limits = [TooManyRequests() for _ in range(5)]
+        with (
+            patch(
+                "app.telegram_client.asyncio.to_thread",
+                AsyncMock(side_effect=[*rate_limits, "translated"]),
+            ),
+            patch("app.telegram_client.asyncio.sleep", AsyncMock()) as sleep,
+        ):
+            result = await translate_with_retry("text", "message")
+
+        self.assertEqual("translated", result)
+        self.assertEqual(
+            [60, 120, 240, 480, 600],
+            [call.args[0] for call in sleep.await_args_list],
+        )
+
     async def test_translate_with_retry_does_not_wait_for_other_errors(self):
         with (
             patch(
