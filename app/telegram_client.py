@@ -7,6 +7,7 @@ from weakref import WeakKeyDictionary
 
 from deep_translator.exceptions import TooManyRequests
 from telethon import TelegramClient, events
+from telethon.errors import FloodWaitError
 from telethon.sessions import StringSession
 
 from app.config import BotConfig
@@ -30,7 +31,11 @@ TRANSLATION_ATTEMPTS = 3
 RATE_LIMIT_RETRY_DELAY_SECONDS = 60
 RATE_LIMIT_MAX_DELAY_SECONDS = 600
 SEND_TIMEOUT_SECONDS = 120
+SEND_DELAY_SECONDS = 1
 _translation_locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    WeakKeyDictionary()
+)
+_send_locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
     WeakKeyDictionary()
 )
 
@@ -42,6 +47,40 @@ def _get_translation_lock() -> asyncio.Lock:
         lock = asyncio.Lock()
         _translation_locks[loop] = lock
     return lock
+
+
+def _get_send_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _send_locks.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _send_locks[loop] = lock
+    return lock
+
+
+async def _send_with_flood_wait(send_operation: Any, purpose: str) -> Any:
+    """Serialize Telegram sends and retry after Telegram-requested flood waits."""
+    async with _get_send_lock():
+        while True:
+            try:
+                result = await asyncio.wait_for(
+                    send_operation(), timeout=SEND_TIMEOUT_SECONDS
+                )
+            except asyncio.CancelledError:
+                raise
+            except FloodWaitError as exc:
+                delay = max(int(exc.seconds), 1)
+                logger.warning(
+                    "Telegram flood wait reached while sending %s; waiting %s "
+                    "seconds before retry",
+                    purpose,
+                    delay,
+                )
+                await asyncio.sleep(delay)
+                continue
+
+            await asyncio.sleep(SEND_DELAY_SECONDS)
+            return result
 
 
 def create_client(config: BotConfig) -> TelegramClient:
@@ -217,15 +256,15 @@ async def send_server_side_media_message(
     short_caption: str,
 ) -> None:
     if len(message) <= MEDIA_CAPTION_LIMIT:
-        await asyncio.wait_for(
-            client.send_file(destination, media, caption=message),
-            timeout=SEND_TIMEOUT_SECONDS,
+        await _send_with_flood_wait(
+            lambda: client.send_file(destination, media, caption=message),
+            "media",
         )
         return
 
-    await asyncio.wait_for(
-        client.send_file(destination, media, caption=short_caption),
-        timeout=SEND_TIMEOUT_SECONDS,
+    await _send_with_flood_wait(
+        lambda: client.send_file(destination, media, caption=short_caption),
+        "media",
     )
     await send_text_chunks(client, destination, message)
 
@@ -280,8 +319,9 @@ async def _translate_with_retry_locked(text: str, purpose: str) -> str:
 
 async def send_text_chunks(client: TelegramClient, destination: Any, text: str) -> None:
     for chunk in split_message(text):
-        await asyncio.wait_for(
-            client.send_message(destination, chunk), timeout=SEND_TIMEOUT_SECONDS
+        await _send_with_flood_wait(
+            lambda chunk=chunk: client.send_message(destination, chunk),
+            "message",
         )
 
 

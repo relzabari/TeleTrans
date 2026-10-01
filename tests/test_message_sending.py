@@ -2,10 +2,38 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from app.telegram_client import process_message
+from telethon.errors import FloodWaitError
+
+from app.telegram_client import process_message, send_text_chunks
 
 
 class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_flood_wait_sleeps_and_retries_same_message(self):
+        flood_wait = FloodWaitError(request=None, capture=240)
+        client = SimpleNamespace(
+            send_message=AsyncMock(side_effect=[flood_wait, "sent"])
+        )
+
+        with patch("app.telegram_client.asyncio.sleep", AsyncMock()) as sleep:
+            await send_text_chunks(client, "destination", "message")
+
+        self.assertEqual(2, client.send_message.await_count)
+        self.assertEqual(
+            client.send_message.await_args_list[0],
+            client.send_message.await_args_list[1],
+        )
+        self.assertEqual(240, sleep.await_args_list[0].args[0])
+
+    async def test_non_flood_send_error_is_not_retried(self):
+        client = SimpleNamespace(
+            send_message=AsyncMock(side_effect=RuntimeError("send failed"))
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "send failed"):
+            await send_text_chunks(client, "destination", "message")
+
+        client.send_message.assert_awaited_once()
+
     async def test_keyword_match_sends_message_to_both_destinations(self):
         client = SimpleNamespace(send_file=AsyncMock(), send_message=AsyncMock())
         config = SimpleNamespace(
@@ -119,7 +147,7 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
             await process_message(client, config, event)
 
         self.assertEqual(3, translate.call_count)
-        sleep.assert_not_awaited()
+        sleep.assert_awaited_once_with(1)
         self.assertIn("שלום", client.send_message.await_args.args[1])
 
     async def test_message_translation_failure_sends_fallback_and_continues(self):
