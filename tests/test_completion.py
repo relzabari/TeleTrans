@@ -97,6 +97,30 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
             [item.args[0] for item in manager.sync_channel.await_args_list],
         )
 
+    async def test_source_channels_can_be_replaced_at_runtime(self):
+        entities = {
+            "one": SimpleNamespace(id=1, username="one"),
+            "two": SimpleNamespace(id=2, username="two"),
+        }
+        client = FakeTelegramClient([])
+        client.get_entity = AsyncMock(side_effect=lambda source: entities[source])
+        manager = CompletionManager(
+            client,
+            ["one"],
+            self.store,
+            lambda message: self._record([], message),
+            chat_id_resolver=lambda entity: -1000 - entity.id,
+        )
+
+        await manager.initialize()
+        self.assertTrue(manager.handles_chat(entities["one"]))
+        await manager.update_source_channels(["two"])
+
+        self.assertFalse(manager.handles_chat(entities["one"]))
+        self.assertTrue(manager.handles_chat(entities["two"]))
+        self.assertEqual(["two"], manager.source_channels)
+        self.assertEqual(["two"], list(manager.health_channels()))
+
     async def test_sync_processes_only_missing_messages_in_order(self):
         processed = []
         client = FakeTelegramClient([3, 4, 5, 6])

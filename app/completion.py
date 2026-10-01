@@ -43,10 +43,16 @@ class CompletionManager:
         self.processed_messages = 0
         self.last_progress_at: str | None = None
         self.channel_statuses: dict[int, dict[str, Any]] = {}
+        self._configured_chat_ids: set[int] = set()
 
     async def initialize(self) -> None:
         """Set a safe starting point for channels that have no checkpoint yet."""
-        for source in self.source_channels:
+        await self.update_source_channels(self.source_channels)
+
+    async def update_source_channels(self, source_channels: Iterable[str]) -> None:
+        new_sources = list(dict.fromkeys(source_channels))
+        resolved: list[tuple[str, Any, int, int]] = []
+        for source in new_sources:
             entity = await self.client.get_entity(source)
             chat_id = self.chat_id_resolver(entity)
             checkpoint = await self.store.get(chat_id)
@@ -59,8 +65,19 @@ class CompletionManager:
                 logger.info(
                     "Initialized checkpoint for %s at message %s", source, checkpoint
                 )
+            resolved.append((source, entity, chat_id, checkpoint))
 
+        configured_chat_ids = {item[2] for item in resolved}
+        for source, entity, chat_id, checkpoint in resolved:
             self._ensure_channel_status(entity, source, chat_id, checkpoint)
+        self.source_channels = new_sources
+        self._configured_chat_ids = configured_chat_ids
+        for chat_id in list(self.channel_statuses):
+            if chat_id not in configured_chat_ids:
+                del self.channel_statuses[chat_id]
+
+    def handles_chat(self, entity: Any) -> bool:
+        return self.chat_id_resolver(entity) in self._configured_chat_ids
 
     async def sync_all(self) -> None:
         for source in self.source_channels:

@@ -332,10 +332,12 @@ async def send_text_chunks(client: TelegramClient, destination: Any, text: str) 
 def register_handlers(
     client: TelegramClient, config: BotConfig, completion: CompletionManager
 ) -> None:
-    @client.on(events.NewMessage(chats=config.source_channels))
+    @client.on(events.NewMessage())
     async def handler(event: Any) -> None:
         try:
             chat = await event.get_chat()
+            if not completion.handles_chat(chat):
+                return
             await completion.sync_channel(chat)
         except Exception as exc:
             logger.exception("Failed to process message: %s", exc)

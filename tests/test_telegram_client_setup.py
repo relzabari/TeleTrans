@@ -224,7 +224,10 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         client = SimpleNamespace(
             on=MagicMock(side_effect=lambda _event: lambda callback: callbacks.append(callback))
         )
-        completion = SimpleNamespace(sync_channel=AsyncMock())
+        completion = SimpleNamespace(
+            handles_chat=MagicMock(return_value=True),
+            sync_channel=AsyncMock(),
+        )
         config = make_config()
         register_handlers(client, config, completion)
         self.assertEqual(1, len(callbacks))
@@ -232,8 +235,15 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         chat = object()
         event = SimpleNamespace(get_chat=AsyncMock(return_value=chat))
         await callbacks[0](event)
+        completion.handles_chat.assert_called_once_with(chat)
         completion.sync_channel.assert_awaited_once_with(chat)
 
+        completion.handles_chat.return_value = False
+        completion.sync_channel.reset_mock()
+        await callbacks[0](event)
+        completion.sync_channel.assert_not_awaited()
+
+        completion.handles_chat.return_value = True
         completion.sync_channel = AsyncMock(side_effect=RuntimeError("sync failed"))
         with patch("app.telegram_client.logger.exception") as logged:
             await callbacks[0](event)

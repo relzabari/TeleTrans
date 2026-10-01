@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.config import BotConfig
+from app.dynamic_config import DynamicConfig
 from app.runtime import BotRuntime
 
 
@@ -117,6 +118,73 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
                 BotRuntime._create_checkpoint_store(remote_config),
             )
             remote_store.assert_called_once_with("url", "key")
+
+    def test_dynamic_config_store_selection_and_value_application(self):
+        self.assertIsNone(BotRuntime._create_config_store(make_config()))
+        remote_config = make_config(supabase_url="url", supabase_key="key")
+        with patch("app.runtime.SupabaseConfigStore") as store:
+            self.assertIs(
+                store.return_value,
+                BotRuntime._create_config_store(remote_config),
+            )
+            store.assert_called_once_with("url", "key")
+
+        dynamic = DynamicConfig(
+            source_channels=["new"],
+            destination="new destination",
+            important_destination="important",
+            important_keywords=["keyword"],
+            backfill_days=4,
+            refresh_seconds=90,
+        )
+        BotRuntime._apply_dynamic_values(remote_config, dynamic)
+        self.assertEqual(["new"], remote_config.source_channels)
+        self.assertEqual("new destination", remote_config.destination)
+        self.assertEqual("important", remote_config.important_destination)
+        self.assertEqual(["keyword"], remote_config.important_keywords)
+        self.assertEqual(4, remote_config.backfill_days)
+
+    async def test_refresh_applies_changed_configuration(self):
+        runtime = BotRuntime()
+        runtime.client = object()
+        runtime.completion = SimpleNamespace(
+            update_source_channels=AsyncMock(), backfill_days=2
+        )
+        config = make_config(destination="resolved old")
+        dynamic = DynamicConfig(
+            source_channels=["new"],
+            destination="new destination",
+            important_destination="important",
+            important_keywords=["keyword"],
+            backfill_days=4,
+            refresh_seconds=90,
+        )
+        store = SimpleNamespace(load=AsyncMock(return_value=dynamic))
+
+        with (
+            patch(
+                "app.runtime.asyncio.sleep",
+                AsyncMock(side_effect=[None, asyncio.CancelledError]),
+            ),
+            patch(
+                "app.runtime.resolve_destination",
+                AsyncMock(side_effect=["resolved new", "resolved important"]),
+            ),
+            patch.object(runtime, "_now", return_value="refreshed"),
+        ):
+            with self.assertRaises(asyncio.CancelledError):
+                await runtime._refresh_configuration_loop(
+                    store, config, "old destination", None, 60
+                )
+
+        runtime.completion.update_source_channels.assert_awaited_once_with(["new"])
+        self.assertEqual("resolved new", config.destination)
+        self.assertEqual("resolved important", config.important_destination)
+        self.assertEqual(["keyword"], config.important_keywords)
+        self.assertEqual(4, runtime.completion.backfill_days)
+        self.assertEqual("supabase", runtime.configuration_source)
+        self.assertEqual("refreshed", runtime.config_last_refreshed_at)
+        self.assertIsNone(runtime.config_error)
 
     async def test_run_completes_initialization_and_resolves_both_destinations(self):
         runtime = BotRuntime()
