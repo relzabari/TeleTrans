@@ -1,6 +1,11 @@
 import unittest
 
-from app.formatter import build_media_caption, build_message, split_message
+from app.formatter import (
+    build_media_caption,
+    build_message,
+    build_original_message_url,
+    split_message,
+)
 
 
 class FormatterTests(unittest.TestCase):
@@ -12,14 +17,29 @@ class FormatterTests(unittest.TestCase):
             "שלום",
             source_username="source_channel",
             original_sent_at="18/08/2026 14:35",
+            source_message_id=123,
         )
 
         self.assertIn("מקור: قناة المصدر - ערוץ מקור (@source_channel)", message)
         self.assertIn("שלום", message)
-        self.assertIn("مرحبا", message)
-        self.assertIn("הודעה מקורית:", message)
+        self.assertNotIn("مرحبا", message)
+        self.assertIn(
+            "[לחץ כאן להודעה המקורית](https://t.me/source_channel/123)",
+            message,
+        )
         self.assertIn("זמן פרסום מקורי: 18/08/2026 14:35 (שעון ישראל)", message)
         self.assertNotIn("🇸🇦", message)
+
+    def test_original_text_is_fallback_when_link_cannot_be_built(self):
+        message = build_message("مرحبا", "قناة", "ערוץ", "שלום")
+
+        self.assertIn("הודעה מקורית:\n\nمرحبا", message)
+
+    def test_private_channel_link_is_built_for_members(self):
+        self.assertEqual(
+            "https://t.me/c/1234567890/42",
+            build_original_message_url(None, 42, -1001234567890),
+        )
 
     def test_media_caption_contains_only_source(self):
         self.assertEqual(

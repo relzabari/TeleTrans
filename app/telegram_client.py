@@ -181,6 +181,10 @@ async def process_message(client: TelegramClient, config: BotConfig, event: Any)
             translated,
             source_username=username,
             original_sent_at=original_sent_at,
+            source_message_id=getattr(event, "id", None),
+            source_chat_id=(
+                getattr(event, "chat_id", None) or getattr(chat, "id", None)
+            ),
         )
         matches = find_matching_keywords(
             text, translated, getattr(config, "important_keywords", [])
