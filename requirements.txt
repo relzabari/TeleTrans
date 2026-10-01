@@ -1,5 +1,6 @@
 telethon
 deep-translator
+requests
 python-dotenv
 langdetect
 supabase

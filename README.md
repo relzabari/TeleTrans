@@ -34,6 +34,10 @@ TeleTrans is a Telegram bot that listens to messages from a configured source ch
    TELEGRAM_SESSION=
    SUPABASE_URL=your_project_url
    BACKFILL_DAYS=2
+   TRANSLATION_PROVIDER=azure
+   AZURE_TRANSLATOR_KEY=your_secret_key
+   AZURE_TRANSLATOR_REGION=global
+   AZURE_TRANSLATOR_ENDPOINT=https://api.cognitive.microsofttranslator.com/
    SUPABASE_KEY=your_service_role_key
    ```
 4. Configure data/config.json
