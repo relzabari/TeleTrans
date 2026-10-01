@@ -119,7 +119,7 @@ class MessageSendingTests(unittest.IsolatedAsyncioTestCase):
             await process_message(client, config, event)
 
         self.assertEqual(3, translate.call_count)
-        sleep.assert_awaited_once_with(2)
+        sleep.assert_not_awaited()
         self.assertIn("שלום", client.send_message.await_args.args[1])
 
     async def test_message_translation_failure_sends_fallback_and_continues(self):

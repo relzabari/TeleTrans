@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
+from deep_translator.exceptions import TooManyRequests
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 TRANSLATION_TIMEOUT_SECONDS = 60
 TRANSLATION_ATTEMPTS = 3
-TRANSLATION_RETRY_DELAY_SECONDS = 2
+RATE_LIMIT_RETRY_DELAY_SECONDS = 60
 SEND_TIMEOUT_SECONDS = 120
 
 
@@ -236,7 +237,13 @@ async def translate_with_retry(text: str, purpose: str) -> str:
                 TRANSLATION_ATTEMPTS,
                 type(exc).__name__,
             )
-            await asyncio.sleep(TRANSLATION_RETRY_DELAY_SECONDS)
+            if isinstance(exc, TooManyRequests):
+                delay = RATE_LIMIT_RETRY_DELAY_SECONDS * (2 ** (attempt - 1))
+                logger.warning(
+                    "Translation rate limit reached; waiting %s seconds before retry",
+                    delay,
+                )
+                await asyncio.sleep(delay)
 
     assert last_error is not None
     raise last_error

@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from deep_translator.exceptions import TooManyRequests
 from app.config import BotConfig
 from app.telegram_client import (
     create_client,
@@ -140,6 +141,32 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaises(asyncio.CancelledError):
                 await translate_with_retry("text", "message")
+
+    async def test_translate_with_retry_waits_only_for_rate_limits(self):
+        with (
+            patch(
+                "app.telegram_client.asyncio.to_thread",
+                AsyncMock(side_effect=[TooManyRequests(), TooManyRequests(), "translated"]),
+            ),
+            patch("app.telegram_client.asyncio.sleep", AsyncMock()) as sleep,
+        ):
+            result = await translate_with_retry("text", "message")
+
+        self.assertEqual("translated", result)
+        self.assertEqual([60, 120], [call.args[0] for call in sleep.await_args_list])
+
+    async def test_translate_with_retry_does_not_wait_for_other_errors(self):
+        with (
+            patch(
+                "app.telegram_client.asyncio.to_thread",
+                AsyncMock(side_effect=[RuntimeError("temporary"), "translated"]),
+            ),
+            patch("app.telegram_client.asyncio.sleep", AsyncMock()) as sleep,
+        ):
+            result = await translate_with_retry("text", "message")
+
+        self.assertEqual("translated", result)
+        sleep.assert_not_awaited()
 
     async def test_media_copy_cancellation_is_not_swallowed(self):
         client = SimpleNamespace(send_file=AsyncMock(side_effect=asyncio.CancelledError))
