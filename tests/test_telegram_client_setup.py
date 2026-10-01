@@ -185,6 +185,33 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("translated", result)
         sleep.assert_not_awaited()
 
+    async def test_translation_requests_are_serialized_globally(self):
+        active_requests = 0
+        maximum_active_requests = 0
+
+        async def translate_in_thread(_function, text):
+            nonlocal active_requests, maximum_active_requests
+            active_requests += 1
+            maximum_active_requests = max(maximum_active_requests, active_requests)
+            await asyncio.sleep(0.01)
+            active_requests -= 1
+            return f"translated-{text}"
+
+        with patch(
+            "app.telegram_client.asyncio.to_thread",
+            AsyncMock(side_effect=translate_in_thread),
+        ):
+            results = await asyncio.gather(
+                translate_with_retry("one", "message"),
+                translate_with_retry("two", "message"),
+                translate_with_retry("three", "message"),
+            )
+
+        self.assertEqual(
+            ["translated-one", "translated-two", "translated-three"], results
+        )
+        self.assertEqual(1, maximum_active_requests)
+
     async def test_media_copy_cancellation_is_not_swallowed(self):
         client = SimpleNamespace(send_file=AsyncMock(side_effect=asyncio.CancelledError))
         with self.assertRaises(asyncio.CancelledError):

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from typing import Any
+from weakref import WeakKeyDictionary
 
 from deep_translator.exceptions import TooManyRequests
 from telethon import TelegramClient, events
@@ -29,6 +30,18 @@ TRANSLATION_ATTEMPTS = 3
 RATE_LIMIT_RETRY_DELAY_SECONDS = 60
 RATE_LIMIT_MAX_DELAY_SECONDS = 600
 SEND_TIMEOUT_SECONDS = 120
+_translation_locks: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock] = (
+    WeakKeyDictionary()
+)
+
+
+def _get_translation_lock() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _translation_locks.get(loop)
+    if lock is None:
+        lock = asyncio.Lock()
+        _translation_locks[loop] = lock
+    return lock
 
 
 def create_client(config: BotConfig) -> TelegramClient:
@@ -218,6 +231,11 @@ async def send_server_side_media_message(
 
 
 async def translate_with_retry(text: str, purpose: str) -> str:
+    async with _get_translation_lock():
+        return await _translate_with_retry_locked(text, purpose)
+
+
+async def _translate_with_retry_locked(text: str, purpose: str) -> str:
     last_error: Exception | None = None
     regular_failures = 0
     rate_limit_failures = 0
