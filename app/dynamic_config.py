@@ -7,8 +7,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class DynamicConfig:
     source_channels: list[str]
-    destination: str
-    important_destination: str | None
+    destination: str | int
+    important_destination: str | int | None
     important_keywords: list[str]
     backfill_days: int
     refresh_seconds: int
@@ -40,7 +40,8 @@ class SupabaseConfigStore:
             settings_response = (
                 self.client.table("app_settings")
                 .select(
-                    "destination,important_destination,backfill_days,"
+                    "destination,destination_chat_id,important_destination,"
+                    "important_destination_chat_id,backfill_days,"
                     "config_refresh_seconds"
                 )
                 .eq("id", 1)
@@ -61,11 +62,19 @@ class SupabaseConfigStore:
 
             return DynamicConfig(
                 source_channels=channels,
-                destination=str(settings["destination"]).strip(),
+                destination=(
+                    int(settings["destination_chat_id"])
+                    if settings.get("destination_chat_id") is not None
+                    else str(settings["destination"]).strip()
+                ),
                 important_destination=(
-                    str(settings["important_destination"]).strip()
-                    if settings.get("important_destination")
-                    else None
+                    int(settings["important_destination_chat_id"])
+                    if settings.get("important_destination_chat_id") is not None
+                    else (
+                        str(settings["important_destination"]).strip()
+                        if settings.get("important_destination")
+                        else None
+                    )
                 ),
                 important_keywords=[
                     str(row["phrase"]).strip()

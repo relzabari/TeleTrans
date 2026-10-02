@@ -38,7 +38,9 @@ class DynamicConfigTests(unittest.IsolatedAsyncioTestCase):
                 [
                     {
                         "destination": " regular ",
+                        "destination_chat_id": -1004372584244,
                         "important_destination": " important ",
+                        "important_destination_chat_id": -1004497281225,
                         "backfill_days": 3,
                         "config_refresh_seconds": 90,
                     }
@@ -52,8 +54,8 @@ class DynamicConfigTests(unittest.IsolatedAsyncioTestCase):
             config = await SupabaseConfigStore("url", "key").load()
 
         self.assertEqual(["one", "two"], config.source_channels)
-        self.assertEqual("regular", config.destination)
-        self.assertEqual("important", config.important_destination)
+        self.assertEqual(-1004372584244, config.destination)
+        self.assertEqual(-1004497281225, config.important_destination)
         self.assertEqual(["keyword", "מילה"], config.important_keywords)
         self.assertEqual(3, config.backfill_days)
         self.assertEqual(90, config.refresh_seconds)
@@ -76,7 +78,9 @@ class DynamicConfigTests(unittest.IsolatedAsyncioTestCase):
             [
                 {
                     "destination": "target",
+                    "destination_chat_id": None,
                     "important_destination": None,
+                    "important_destination_chat_id": None,
                     "backfill_days": 2,
                     "config_refresh_seconds": 60,
                 }

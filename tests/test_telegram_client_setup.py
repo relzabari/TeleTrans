@@ -85,6 +85,12 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         direct = SimpleNamespace(get_entity=AsyncMock(return_value="entity"))
         self.assertEqual("entity", await resolve_destination(direct, "target"))
 
+        numeric = SimpleNamespace(get_entity=AsyncMock(return_value="channel"))
+        self.assertEqual(
+            "channel", await resolve_destination(numeric, "-1004372584244")
+        )
+        numeric.get_entity.assert_awaited_once_with(-1004372584244)
+
         matching_entity = SimpleNamespace(title="Target")
         dialog_client = SimpleNamespace(
             get_entity=AsyncMock(side_effect=ValueError),

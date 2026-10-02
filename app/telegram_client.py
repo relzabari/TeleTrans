@@ -106,13 +106,18 @@ async def start_client(client: TelegramClient, config: BotConfig) -> None:
         )
 
 
-async def resolve_destination(client: TelegramClient, destination: str) -> Any:
+async def resolve_destination(client: TelegramClient, destination: str | int) -> Any:
+    entity_reference = destination
+    if isinstance(destination, str):
+        stripped = destination.strip()
+        if stripped.lstrip("-").isdigit():
+            entity_reference = int(stripped)
     try:
-        return await client.get_entity(destination)
+        return await client.get_entity(entity_reference)
     except ValueError:
         pass
 
-    normalized_destination = _normalize_dialog_title(destination)
+    normalized_destination = _normalize_dialog_title(str(destination))
     async for dialog in client.iter_dialogs():
         title = getattr(dialog, "name", None) or getattr(dialog.entity, "title", None)
         if title and _normalize_dialog_title(str(title)) == normalized_destination:

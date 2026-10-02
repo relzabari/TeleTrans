@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 @dataclass
 class BotConfig:
     source_channels: list[str]
-    destination: str
+    destination: str | int
     api_id: int
     api_hash: str
     phone: str
@@ -21,7 +21,7 @@ class BotConfig:
     checkpoint_path: Path
     supabase_url: str | None
     supabase_key: str | None
-    important_destination: Any | None = None
+    important_destination: str | int | Any | None = None
     important_keywords: list[str] = field(default_factory=list)
     backfill_days: int = 2
 

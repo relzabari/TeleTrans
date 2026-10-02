@@ -104,12 +104,8 @@ class BotRuntime:
 
             self.client = create_client(config)
             await start_client(self.client, config)
-            destination_name = str(config.destination)
-            important_destination_name = (
-                str(config.important_destination)
-                if config.important_destination
-                else None
-            )
+            destination_name = config.destination
+            important_destination_name = config.important_destination
             config.destination = await resolve_destination(
                 self.client, destination_name
             )
@@ -196,8 +192,8 @@ class BotRuntime:
         self,
         store: SupabaseConfigStore,
         config: BotConfig,
-        destination_name: str,
-        important_destination_name: str | None,
+        destination_name: str | int,
+        important_destination_name: str | int | None,
         refresh_seconds: int,
     ) -> None:
         while True:
