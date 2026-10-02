@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>TeleTrans — ניהול</title>
+  <style>
+    :root{font-family:Arial,sans-serif;color:#172033;background:#f4f6fa}*{box-sizing:border-box}
+    body{margin:0}.top{background:#172033;color:#fff;padding:22px 5vw;display:flex;justify-content:space-between;align-items:center}
+    .top h1{margin:0;font-size:24px}.top span{color:#a9b6cf}.wrap{max-width:1180px;margin:28px auto;padding:0 18px}
+    .status{padding:12px 16px;border-radius:10px;margin-bottom:18px;background:#e8eef9}.status.error{background:#ffe8e8;color:#8b1919}
+    .card{background:#fff;border:1px solid #e0e5ee;border-radius:14px;padding:20px;margin-bottom:22px;box-shadow:0 4px 18px #1c2b4a0d}
+    h2{margin:0 0 16px}.row{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.field{display:flex;flex-direction:column;gap:6px;min-width:170px;flex:1}
+    label{font-size:13px;color:#59657a}input,button{font:inherit;border-radius:8px;padding:10px 12px}input{border:1px solid #cbd3df;background:#fff}
+    button{border:0;background:#3157d5;color:#fff;cursor:pointer}button.secondary{background:#e9edf5;color:#26344e}button.danger{background:#b83232}
+    table{width:100%;border-collapse:collapse;margin-top:16px}th,td{text-align:right;padding:11px;border-bottom:1px solid #edf0f5;vertical-align:middle}
+    th{font-size:13px;color:#667085}.badge{display:inline-block;padding:4px 9px;border-radius:20px;background:#dff6e8;color:#176a39}.badge.off{background:#eceff4;color:#657084}
+    .actions{display:flex;gap:7px;flex-wrap:wrap}.actions button{padding:7px 9px;font-size:13px}.muted{color:#7b8495}.ltr{direction:ltr;text-align:left}
+    @media(max-width:760px){.table-wrap{overflow:auto}table{min-width:720px}.top{align-items:flex-start;gap:8px;flex-direction:column}}
+  </style>
+</head>
+<body>
+  <header class="top"><h1>TeleTrans — ממשק ניהול</h1><span>השינויים נקלטים בשירות בתוך כדקה</span></header>
+  <main class="wrap">
+    <div id="status" class="status">טוען נתונים…</div>
+
+    <section class="card">
+      <h2>ערוצי מקור</h2>
+      <form id="channel-form" class="row">
+        <div class="field"><label for="channel-username">שם משתמש</label><input id="channel-username" required placeholder="PalpostN"></div>
+        <div class="field"><label for="channel-name">שם תצוגה אופציונלי</label><input id="channel-name"></div>
+        <button type="submit">הוסף ערוץ</button>
+      </form>
+      <div class="table-wrap"><table><thead><tr><th>ערוץ</th><th>שם תצוגה</th><th>מזהה Telegram</th><th>מצב</th><th>פעולות</th></tr></thead><tbody id="channels"></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <h2>מילות מפתח</h2>
+      <form id="keyword-form" class="row">
+        <div class="field"><label for="keyword-phrase">מילה או ביטוי</label><input id="keyword-phrase" required></div>
+        <div class="field"><label for="keyword-language">שפה</label><input id="keyword-language" placeholder="עברית / ערבית"></div>
+        <div class="field"><label for="keyword-category">קטגוריה</label><input id="keyword-category" placeholder="יישוב / אירוע"></div>
+        <button type="submit">הוסף ביטוי</button>
+      </form>
+      <div class="table-wrap"><table><thead><tr><th>ביטוי</th><th>שפה</th><th>קטגוריה</th><th>מצב</th><th>פעולות</th></tr></thead><tbody id="keywords"></tbody></table></div>
+    </section>
+
+    <section class="card">
+      <h2>הגדרות כלליות</h2>
+      <form id="settings-form" class="row">
+        <div class="field"><label for="destination">ערוץ יעד</label><input id="destination" required></div>
+        <div class="field"><label for="important-destination">ערוץ יעד חשוב</label><input id="important-destination"></div>
+        <div class="field"><label for="backfill">ימי השלמה</label><input id="backfill" type="number" min="0" required></div>
+        <div class="field"><label for="refresh">רענון הגדרות בשניות</label><input id="refresh" type="number" min="10" required></div>
+        <button type="submit">שמור הגדרות</button>
+      </form>
+      <p class="muted">מזהי ערוצי היעד נשמרים בנפרד ואינם משתנים בעת עריכת שמות התצוגה.</p>
+    </section>
+  </main>
+  <script>
+    const statusBox=document.getElementById('status');let state={channels:[],keywords:[],settings:null};
+    const api=async(path,options={})=>{const response=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});if(!response.ok){let detail=response.statusText;try{detail=(await response.json()).detail||detail}catch{}throw new Error(detail)}return response.status===204?null:response.json()};
+    const textCell=(value,cls='')=>{const td=document.createElement('td');td.textContent=value??'—';if(cls)td.className=cls;return td};
+    const button=(label,cls,action)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.className=cls;el.onclick=action;return el};
+    const show=(message,error=false)=>{statusBox.textContent=message;statusBox.className='status'+(error?' error':'')};
+    function renderRows(items,target,kind){const body=document.getElementById(target);body.replaceChildren();for(const item of items){const tr=document.createElement('tr');
+      if(kind==='channel'){tr.append(textCell('@'+item.username,'ltr'),textCell(item.display_name),textCell(item.source_chat_id,'ltr'));}
+      else{tr.append(textCell(item.phrase),textCell(item.language),textCell(item.category));}
+      const active=document.createElement('td'),badge=document.createElement('span');badge.className='badge'+(item.enabled?'':' off');badge.textContent=item.enabled?'פעיל':'מושבת';active.append(badge);tr.append(active);
+      const actions=document.createElement('td');actions.className='actions';actions.append(button(item.enabled?'השבת':'הפעל','secondary',()=>updateItem(kind,item.id,{enabled:!item.enabled})));
+      actions.append(button('ערוך','secondary',()=>editItem(kind,item)));
+      actions.append(button('מחק','danger',()=>deleteItem(kind,item.id)));tr.append(actions);body.append(tr);}}
+    function render(){renderRows(state.channels,'channels','channel');renderRows(state.keywords,'keywords','keyword');const s=state.settings||{};document.getElementById('destination').value=s.destination||'';document.getElementById('important-destination').value=s.important_destination||'';document.getElementById('backfill').value=s.backfill_days??2;document.getElementById('refresh').value=s.config_refresh_seconds??60;}
+    async function load(){try{state=await api('/api/admin/config');render();show(`נטענו ${state.channels.length} ערוצים ו־${state.keywords.length} ביטויים`)}catch(error){show(error.message,true)}}
+    async function updateItem(kind,id,values){try{await api(`/api/admin/${kind==='channel'?'channels':'keywords'}/${id}`,{method:'PATCH',body:JSON.stringify(values)});await load()}catch(error){show(error.message,true)}}
+    async function deleteItem(kind,id){if(!confirm('למחוק לצמיתות? ניתן גם להשבית במקום למחוק.'))return;try{await api(`/api/admin/${kind==='channel'?'channels':'keywords'}/${id}`,{method:'DELETE'});await load()}catch(error){show(error.message,true)}}
+    function editItem(kind,item){if(kind==='channel'){const username=prompt('שם משתמש',item.username);if(username===null)return;const display_name=prompt('שם תצוגה',item.display_name||'');if(display_name===null)return;updateItem(kind,item.id,{username,display_name:display_name||null});}else{const phrase=prompt('מילה או ביטוי',item.phrase);if(phrase===null)return;const language=prompt('שפה',item.language||'');if(language===null)return;const category=prompt('קטגוריה',item.category||'');if(category===null)return;updateItem(kind,item.id,{phrase,language:language||null,category:category||null});}}
+    document.getElementById('channel-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/channels',{method:'POST',body:JSON.stringify({username:document.getElementById('channel-username').value,display_name:document.getElementById('channel-name').value||null})});event.target.reset();await load()}catch(error){show(error.message,true)}};
+    document.getElementById('keyword-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/keywords',{method:'POST',body:JSON.stringify({phrase:document.getElementById('keyword-phrase').value,language:document.getElementById('keyword-language').value||null,category:document.getElementById('keyword-category').value||null})});event.target.reset();await load()}catch(error){show(error.message,true)}};
+    document.getElementById('settings-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/settings',{method:'PATCH',body:JSON.stringify({destination:document.getElementById('destination').value,important_destination:document.getElementById('important-destination').value||null,backfill_days:Number(document.getElementById('backfill').value),config_refresh_seconds:Number(document.getElementById('refresh').value)})});await load()}catch(error){show(error.message,true)}};
+    load();
+  </script>
+</body>
+</html>
