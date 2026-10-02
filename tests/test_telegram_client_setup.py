@@ -99,6 +99,20 @@ class TelegramClientSetupTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIs(matching_entity, await resolve_destination(dialog_client, "Target"))
 
+        formatted_title_entity = SimpleNamespace(title="\u200fערבית  מתורגם")
+        formatted_title_client = SimpleNamespace(
+            get_entity=AsyncMock(side_effect=ValueError),
+            iter_dialogs=MagicMock(
+                return_value=AsyncDialogs(
+                    [SimpleNamespace(name=None, entity=formatted_title_entity)]
+                )
+            ),
+        )
+        self.assertIs(
+            formatted_title_entity,
+            await resolve_destination(formatted_title_client, "ערבית מתורגם"),
+        )
+
         missing = SimpleNamespace(
             get_entity=AsyncMock(side_effect=ValueError),
             iter_dialogs=MagicMock(return_value=AsyncDialogs([])),

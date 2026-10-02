@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import unicodedata
 from typing import Any
 from weakref import WeakKeyDictionary
 
@@ -111,14 +112,25 @@ async def resolve_destination(client: TelegramClient, destination: str) -> Any:
     except ValueError:
         pass
 
+    normalized_destination = _normalize_dialog_title(destination)
     async for dialog in client.iter_dialogs():
         title = getattr(dialog, "name", None) or getattr(dialog.entity, "title", None)
-        if title == destination:
+        if title and _normalize_dialog_title(str(title)) == normalized_destination:
             return dialog.entity
 
     raise RuntimeError(
         f"Destination '{destination}' was not found by username, ID, or dialog title"
     )
+
+
+def _normalize_dialog_title(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    without_formatting = "".join(
+        character
+        for character in normalized
+        if unicodedata.category(character) != "Cf"
+    )
+    return " ".join(without_formatting.split())
 
 
 async def process_message(client: TelegramClient, config: BotConfig, event: Any) -> None:
