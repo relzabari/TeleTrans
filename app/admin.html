@@ -15,6 +15,8 @@
     button{border:0;background:#3157d5;color:#fff;cursor:pointer}button.secondary{background:#e9edf5;color:#26344e}button.danger{background:#b83232}
     table{width:100%;border-collapse:collapse;margin-top:16px}th,td{text-align:right;padding:11px;border-bottom:1px solid #edf0f5;vertical-align:middle}
     th{font-size:13px;color:#667085}.badge{display:inline-block;padding:4px 9px;border-radius:20px;background:#dff6e8;color:#176a39}.badge.off{background:#eceff4;color:#657084}
+    .badge.syncing{background:#fff2cc;color:#795b00}.badge.error{background:#ffe0e0;color:#9b2020}.health-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:12px}
+    .metric{border:1px solid #e5e9f0;border-radius:10px;padding:14px;background:#fafbfe}.metric-label{font-size:12px;color:#69758a;margin-bottom:7px}.metric-value{font-size:20px;font-weight:700}.section-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
     .actions{display:flex;gap:7px;flex-wrap:wrap}.actions button{padding:7px 9px;font-size:13px}.muted{color:#7b8495}.ltr{direction:ltr;text-align:left}
     @media(max-width:760px){.table-wrap{overflow:auto}table{min-width:720px}.top{align-items:flex-start;gap:8px;flex-direction:column}}
   </style>
@@ -23,6 +25,12 @@
   <header class="top"><h1>TeleTrans — ממשק ניהול</h1><span>השינויים נקלטים בשירות בתוך כדקה</span></header>
   <main class="wrap">
     <div id="status" class="status">טוען נתונים…</div>
+
+    <section class="card">
+      <div class="section-head"><h2>מצב המערכת</h2><button id="refresh-health" type="button" class="secondary">רענן עכשיו</button></div>
+      <div id="health-summary" class="health-grid"></div>
+      <div class="table-wrap"><table><thead><tr><th>ערוץ</th><th>סטטוס</th><th>הודעות שנותרו</th><th>עובדו בהפעלה</th><th>הודעה אחרונה</th><th>בדיקה אחרונה</th><th>שגיאה</th></tr></thead><tbody id="health-channels"></tbody></table></div>
+    </section>
 
     <section class="card">
       <h2>ערוצי מקור</h2>
@@ -58,11 +66,17 @@
     </section>
   </main>
   <script>
-    const statusBox=document.getElementById('status');let state={channels:[],keywords:[],settings:null};
+    const statusBox=document.getElementById('status');let state={channels:[],keywords:[],settings:null};let healthState=null;
     const api=async(path,options={})=>{const response=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(options.headers||{})}});if(!response.ok){let detail=response.statusText;try{detail=(await response.json()).detail||detail}catch{}throw new Error(detail)}return response.status===204?null:response.json()};
     const textCell=(value,cls='')=>{const td=document.createElement('td');td.textContent=value??'—';if(cls)td.className=cls;return td};
     const button=(label,cls,action)=>{const el=document.createElement('button');el.type='button';el.textContent=label;el.className=cls;el.onclick=action;return el};
     const show=(message,error=false)=>{statusBox.textContent=message;statusBox.className='status'+(error?' error':'')};
+    const stateLabel=value=>({ready:'מוכן',syncing:'מסנכרן',starting:'מתחיל',initialized:'אותחל',error:'שגיאה',stopped:'עצור'})[value]||value||'לא ידוע';
+    const formatTime=value=>value?value.replace('T',' ').replace(/\.\d+(?=[+-])?/,''):'—';
+    function metric(label,value){const box=document.createElement('div');box.className='metric';const labelEl=document.createElement('div');labelEl.className='metric-label';labelEl.textContent=label;const valueEl=document.createElement('div');valueEl.className='metric-value';valueEl.textContent=value??'—';box.append(labelEl,valueEl);return box;}
+    function renderHealth(){if(!healthState)return;const channels=Object.values(healthState.channels||{}),known=channels.filter(channel=>channel.pending_messages!==null&&channel.pending_messages!==undefined),pending=known.reduce((sum,channel)=>sum+channel.pending_messages,0);const summary=document.getElementById('health-summary');summary.replaceChildren(metric('סטטוס כללי',stateLabel(healthState.status)),metric('הודעות שנותרו',known.length===channels.length?pending:`${pending}+`),metric('עובדו בהפעלה',healthState.processed_messages??0),metric('סנכרון אחרון',formatTime(healthState.last_synced_at)),metric('מקור הגדרות',healthState.configuration_source||'—'));
+      const body=document.getElementById('health-channels');body.replaceChildren();for(const [configured,channel] of Object.entries(healthState.channels||{})){const tr=document.createElement('tr');tr.append(textCell('@'+configured,'ltr'));const stateCell=document.createElement('td'),badge=document.createElement('span');badge.className='badge '+(channel.state||'');badge.textContent=stateLabel(channel.state);stateCell.append(badge);tr.append(stateCell,textCell(channel.pending_messages??'לא ידוע'),textCell(channel.processed_messages??0),textCell(channel.last_message_id,'ltr'),textCell(formatTime(channel.last_checked_at)),textCell(channel.error));body.append(tr);}}
+    async function loadHealth(){try{const response=await fetch('/health');healthState=await response.json();renderHealth();if(!response.ok)show(`שגיאת שירות: ${healthState.error||response.statusText}`,true)}catch(error){show(`שגיאה בטעינת Health: ${error.message}`,true)}}
     function renderRows(items,target,kind){const body=document.getElementById(target);body.replaceChildren();for(const item of items){const tr=document.createElement('tr');
       if(kind==='channel'){tr.append(textCell('@'+item.username,'ltr'),textCell(item.display_name),textCell(item.source_chat_id,'ltr'));}
       else{tr.append(textCell(item.phrase),textCell(item.language),textCell(item.category));}
@@ -78,7 +92,8 @@
     document.getElementById('channel-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/channels',{method:'POST',body:JSON.stringify({username:document.getElementById('channel-username').value,display_name:document.getElementById('channel-name').value||null})});event.target.reset();await load()}catch(error){show(error.message,true)}};
     document.getElementById('keyword-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/keywords',{method:'POST',body:JSON.stringify({phrase:document.getElementById('keyword-phrase').value,language:document.getElementById('keyword-language').value||null,category:document.getElementById('keyword-category').value||null})});event.target.reset();await load()}catch(error){show(error.message,true)}};
     document.getElementById('settings-form').onsubmit=async event=>{event.preventDefault();try{await api('/api/admin/settings',{method:'PATCH',body:JSON.stringify({destination:document.getElementById('destination').value,important_destination:document.getElementById('important-destination').value||null,backfill_days:Number(document.getElementById('backfill').value),config_refresh_seconds:Number(document.getElementById('refresh').value)})});await load()}catch(error){show(error.message,true)}};
-    load();
+    document.getElementById('refresh-health').onclick=loadHealth;
+    load();loadHealth();setInterval(loadHealth,15000);
   </script>
 </body>
 </html>

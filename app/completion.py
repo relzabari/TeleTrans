@@ -99,6 +99,7 @@ class CompletionManager:
                 )
                 status["state"] = "ready"
                 status["last_checked_at"] = israel_now()
+                status["pending_messages"] = 0
                 return 0
 
             processed = 0
@@ -112,6 +113,9 @@ class CompletionManager:
             status["last_message_id"] = checkpoint
             status["state"] = "syncing"
             status["error"] = None
+            status["pending_messages"] = await self._count_pending(
+                entity, checkpoint
+            )
             try:
                 async for message in self.client.iter_messages(
                     entity, min_id=checkpoint, reverse=True
@@ -126,6 +130,10 @@ class CompletionManager:
                     status["last_message_id"] = int(message.id)
                     status["last_processed_at"] = self.last_progress_at
                     status["processed_messages"] += 1
+                    if status["pending_messages"] is not None:
+                        status["pending_messages"] = max(
+                            0, status["pending_messages"] - 1
+                        )
             except Exception as exc:
                 status["state"] = "error"
                 status["error"] = f"{type(exc).__name__}: {exc}"
@@ -138,7 +146,25 @@ class CompletionManager:
             status["current_message_id"] = None
             status["last_checked_at"] = israel_now()
             status["state"] = "ready"
+            status["pending_messages"] = 0
             return processed
+
+    async def _count_pending(self, entity: Any, checkpoint: int) -> int | None:
+        try:
+            messages = await self.client.get_messages(
+                entity, limit=0, min_id=checkpoint
+            )
+            total = getattr(messages, "total", None)
+            return int(total if total is not None else len(messages))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning(
+                "Could not count pending messages for %s: %s",
+                self._source_name(entity, str(entity)),
+                exc,
+            )
+            return None
 
     async def _apply_backfill_limit(
         self, entity: Any, chat_id: int, source_name: str, checkpoint: int
@@ -197,6 +223,7 @@ class CompletionManager:
                 "last_checked_at": None,
                 "last_processed_at": None,
                 "processed_messages": 0,
+                "pending_messages": None,
                 "error": None,
             }
             self.channel_statuses[chat_id] = status

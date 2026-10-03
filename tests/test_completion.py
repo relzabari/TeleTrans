@@ -16,7 +16,13 @@ class FakeTelegramClient:
     async def get_entity(self, source):
         return self.entity
 
-    async def get_messages(self, entity, limit, offset_date=None):
+    async def get_messages(self, entity, limit, offset_date=None, min_id=None):
+        if limit == 0:
+            return SimpleNamespace(
+                total=len(
+                    [value for value in self.message_ids if value > (min_id or 0)]
+                )
+            )
         if not self.message_ids:
             return []
         return [SimpleNamespace(id=max(self.message_ids))]
@@ -145,6 +151,7 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("ready", channel["state"])
         self.assertEqual(6, channel["last_message_id"])
         self.assertEqual(3, channel["processed_messages"])
+        self.assertEqual(0, channel["pending_messages"])
         self.assertIsNotNone(channel["last_processed_at"])
 
     async def test_backfill_limit_advances_old_checkpoint_before_processing(self):
@@ -166,11 +173,22 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(2, count)
         self.assertEqual([51, 52], processed)
         self.assertEqual(52, await self.store.get(-1000000000123))
-        self.assertEqual(1, client.get_messages.await_args.kwargs["limit"])
-        self.assertIsNotNone(client.get_messages.await_args.kwargs["offset_date"])
+        backfill_calls = [
+            call
+            for call in client.get_messages.await_args_list
+            if call.kwargs.get("limit") == 1
+            and call.kwargs.get("offset_date") is not None
+        ]
+        self.assertEqual(1, len(backfill_calls))
 
         await manager.sync_channel("source")
-        client.get_messages.assert_awaited_once()
+        backfill_calls = [
+            call
+            for call in client.get_messages.await_args_list
+            if call.kwargs.get("limit") == 1
+            and call.kwargs.get("offset_date") is not None
+        ]
+        self.assertEqual(1, len(backfill_calls))
 
     async def test_sync_without_checkpoint_initializes_latest_and_returns_zero(self):
         processed = []
@@ -218,6 +236,7 @@ class CompletionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual("error", channel["state"])
         self.assertEqual(4, channel["last_message_id"])
         self.assertEqual(5, channel["current_message_id"])
+        self.assertEqual(2, channel["pending_messages"])
         self.assertIn("RuntimeError", channel["error"])
 
     @staticmethod

@@ -47,6 +47,7 @@ class WebAndMainTests(unittest.IsolatedAsyncioTestCase):
         ):
             page = await web.admin_page("admin")
             self.assertIn("TeleTrans", page.body.decode("utf-8"))
+            self.assertIn("הודעות שנותרו", page.body.decode("utf-8"))
             self.assertEqual(
                 {"channels": [], "keywords": [], "settings": {}},
                 await web.admin_config("admin"),
